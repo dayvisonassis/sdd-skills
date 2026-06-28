@@ -1,0 +1,14 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Node (in case tooling is added later)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Local Claude settings (do not distribute machine-specific config)
+.claude/settings.local.json
