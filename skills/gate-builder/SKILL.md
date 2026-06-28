@@ -5,12 +5,13 @@ description: Builds the deterministic quality-gate infrastructure for a project 
 
 # Gate Builder
 
-Construct the **deterministic quality gates** of a project — the automated, pass/fail checks that guard structural and behavioral integrity (see `../../docs/Como_criar_gates.md`). The skill reads the analysis reports, decides which gates the project needs, **proposes a plan**, and — after confirmation — **writes the gate configs/scripts** and a single orchestration entry point (`runGate`), verifying each gate actually runs.
+Construct the **deterministic quality gates** of a project — the automated, pass/fail checks that guard structural and behavioral integrity (see `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Como_criar_gates.md`). The skill reads the analysis reports, decides which gates the project needs, **proposes a plan**, and — after confirmation — **writes the gate configs/scripts** and a single orchestration entry point (`runGate`), verifying each gate actually runs.
 
 > Where this fits the SDD flow: `gate-builder` builds the gate **infrastructure** that must exist
 > **before** features are spec'd. Later, `spec-writer` **declares** these gates (by `id`) in each
 > feature's `contract.md`, and `implement-feature` / `evaluator` **execute** them. See
-> `../../docs/Fluxo_SDD_e_Implementacao_das_Skills.md` and `Como_criar_gates.md`.
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Fluxo_SDD_e_Implementacao_das_Skills.md`
+> and `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Como_criar_gates.md`.
 
 ## INPUT
 

@@ -7,10 +7,10 @@ description: Implements a feature autonomously based on its spec, plan, AND cont
 
 Autonomously implement a feature from its existing `spec.md` + `plan.md` + `contract.md`. It implements phase-by-phase with per-phase commits, retry policy, and a final verification/AC report, and is **contract-aware** — it must satisfy the contract's environment, quality gates, and observable criteria, and it records the feature's state in `progress.json` so the `evaluator` can pick it up.
 
-> Base docs (in this package): `../../docs/Contrato_de_Feature.md`,
-> `../../docs/Como_criar_gates.md`,
-> `../../docs/Fluxo_SDD_e_Implementacao_das_Skills.md` (flow + progress.json schema).
-> Start with `../../docs/GUIA_DO_WORKFLOW.md` for how the skills fit together.
+> Base docs (in this package): `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Contrato_de_Feature.md`,
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Como_criar_gates.md`,
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Fluxo_SDD_e_Implementacao_das_Skills.md` (flow + progress.json schema).
+> Start with `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/GUIA_DO_WORKFLOW.md` for how the skills fit together.
 
 ## INPUT
 

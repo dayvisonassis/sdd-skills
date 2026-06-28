@@ -7,10 +7,10 @@ description: Generates technical implementation spec, plan, AND an operational c
 
 Generate implementation-ready technical specifications based on the project's PRD and existing codebase patterns. Besides `spec.md` and `plan.md`, it produces a **third artifact, `contract.md`** — the operational contract consumed by `implement-feature` (which must satisfy it) and by `evaluator` (which validates against it).
 
-> Base docs (in this package): `../../docs/Contrato_de_Feature.md` (contract structure),
-> `../../docs/Como_criar_gates.md` (gates), and
-> `../../docs/Fluxo_SDD_e_Implementacao_das_Skills.md` (full flow). Start with
-> `../../docs/GUIA_DO_WORKFLOW.md` for how the skills fit together.
+> Base docs (in this package): `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Contrato_de_Feature.md` (contract structure),
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Como_criar_gates.md` (gates), and
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Fluxo_SDD_e_Implementacao_das_Skills.md` (full flow). Start with
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/GUIA_DO_WORKFLOW.md` for how the skills fit together.
 
 The skill has two modes:
 
@@ -199,7 +199,7 @@ Use the following template to generate spec and plan: `references/feature-templa
 **4.3: Generate CONTRACT (v2 — the new artifact)**:
 
 Produce `contract.md` using `references/contract-template.md`. It has four blocks (see
-`../../docs/Contrato_de_Feature.md`):
+`https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Contrato_de_Feature.md`):
 
 - **Environment Contract** — minimum runtime/services/tools required to execute and test the
   feature. Derive from the feature's runtime surfaces + codebase. If the environment is not
@@ -207,7 +207,7 @@ Produce `contract.md` using `references/contract-template.md`. It has four block
 - **Quality Gates** — the objective technical floor: the project's lint, typecheck, build,
   test, and architecture-check commands discovered in Step 1.3. **Each gate has a stable
   `id`** (e.g. `typecheck`, `lint`, `build`, `tests`, `arch`). See
-  `../../docs/Como_criar_gates.md`.
+  `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Como_criar_gates.md`.
 - **Coverage Manifest** — map each expected behavior to a validation **surface** with a stable
   ID (e.g. `Public-01`). No behavior should be left without a covering surface.
 - **Surfaces & Behaviors** — for each surface, the initial state + concrete observable

@@ -7,9 +7,9 @@ description: Specialized, lightweight corrector dispatched by the evaluator on F
 
 A surgical corrector. When the `evaluator` returns **FAIL**, it dispatches `fix-runner` with a structured error report. `fix-runner` fixes **only** the reported problem, with the smallest footprint, then hands control back to the `evaluator` to re-confirm. It is deliberately smaller and more focused than `implement-feature`: it corrects, it does not build.
 
-> Base docs: `../../docs/Skill_Fix_Runner.md` (full rationale),
-> `../../docs/Contrato_de_Feature.md` (contract criteria),
-> `../../docs/Fluxo_SDD_e_Implementacao_das_Skills.md` (flow, handoff, progress.json).
+> Base docs: `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Skill_Fix_Runner.md` (full rationale),
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Contrato_de_Feature.md` (contract criteria),
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Fluxo_SDD_e_Implementacao_das_Skills.md` (flow, handoff, progress.json).
 > Report schema: `../evaluator/references/evaluation-report-schema.md`.
 
 **This skill is stateless about the loop.** The `evaluator` owns the attempt counter, the limit N, and the ABORTED decision. `fix-runner` performs **one** correction per invocation.

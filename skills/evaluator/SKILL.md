@@ -7,10 +7,10 @@ description: Externally evaluates an already-implemented feature against its con
 
 A second, independent layer of validation. After `implement-feature` finishes a feature, the `evaluator` looks at it **from the outside** and confirms — against `contract.md` — whether the delivery conforms. It finds deviations the implementer's self-check missed. It **does not fix code**; it evaluates and **orchestrates the correction loop**, dispatching `fix-runner` on failure.
 
-> Base docs: `../../docs/Skill_Evaluator.md` (full rationale),
-> `../../docs/Contrato_de_Feature.md` (contract structure),
-> `../../docs/Como_criar_gates.md` (gates),
-> `../../docs/Fluxo_SDD_e_Implementacao_das_Skills.md` (flow, states, progress.json schema).
+> Base docs: `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Skill_Evaluator.md` (full rationale),
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Contrato_de_Feature.md` (contract structure),
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Como_criar_gates.md` (gates),
+> `https://github.com/dayvisonassis/sdd-skills/blob/main/docs/Fluxo_SDD_e_Implementacao_das_Skills.md` (flow, states, progress.json schema).
 > Report schema: `references/evaluation-report-schema.md`.
 
 The evaluator complements automated tests — it does not replace them.
