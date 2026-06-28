@@ -31,6 +31,21 @@ copying the package (or installing it) is enough — no external repo is require
 
 ---
 
+## Requirements
+
+Works on **macOS, Linux, and Windows** — the tooling is cross-platform.
+
+- **Node.js** (which provides `npm` / `npx`) — the only hard requirement for Option A.
+  `npx` is part of Node.js and is **not** Windows-specific; it runs the same on every OS.
+  - macOS: `brew install node` (or download from nodejs.org)
+  - Linux: `apt install nodejs npm` / `dnf install nodejs` / your distro's package manager
+  - Windows: installer from nodejs.org
+- **Symlink support** (used by `npx skills`): native on macOS/Linux; on Windows enable
+  *Developer Mode* (or run as admin) so symlinks can be created — otherwise the installer
+  falls back to copying.
+
+> No Node.js? Use **Option B** (copy the folders) — it has no Node dependency at all.
+
 ## Install
 
 Skills are discovered by convention: any folder under a skills directory that contains a
@@ -54,9 +69,11 @@ npx skills add <owner>/<repo> --skill spec-writer,implement-feature,evaluator,fi
 Add `-g` for a global (user-level) install where supported. The installer finds each
 `SKILL.md` under `skills/`.
 
-### Option B — copy the folders
+### Option B — copy the folders (no Node.js required)
 
-Copy the contents of `skills/` into a skills directory:
+Copy the contents of `skills/` into a skills directory.
+
+**macOS / Linux:**
 
 ```bash
 # global, all projects:
@@ -66,10 +83,20 @@ cp -r skills/* ~/.claude/skills/
 cp -r skills/* <project>/.claude/skills/
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+# global, all projects:
+Copy-Item -Recurse skills\* "$env:USERPROFILE\.claude\skills\"
+
+# or just one project:
+Copy-Item -Recurse skills\* "<project>\.claude\skills\"
+```
+
 > Copy the **whole skill folder** (including any `references/`), not just `SKILL.md`. The
-> `docs/` folder is optional reference material — copy it alongside if you want the guide and
-> base docs available; the skills also link to it via `../../docs/`, so keeping the package
-> structure intact preserves those links.
+> `docs/` folder does **not** need to be copied: each skill links to its base docs by
+> absolute GitHub URL, so the references resolve from any install. Copy `docs/` only if you
+> want the guide and base docs available locally too.
 
 ### Verify
 
