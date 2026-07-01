@@ -21,8 +21,14 @@ sdd-skills/
 │   ├── prd-writer/              # generate the product PRD
 │   ├── spec-writer/             # per feature: spec.md + plan.md + contract.md
 │   ├── implement-feature/       # implement, test, satisfy the contract gates, write progress.json
-│   ├── evaluator/               # evaluate against contract.md; owns the fix loop + state
-│   └── fix-runner/              # minimal corrector (dispatched by evaluator on FAIL)
+│   ├── evaluator/               # evaluate against contract.md; owns the loop; routes fixes
+│   ├── fix-runner/              # minimal CODE corrector (dispatched by evaluator on FAIL)
+│   ├── unit-test-writer/            # PABX: Angular .spec.ts + Node apps/backend/__tests__/unit
+│   ├── unit-test-validator/         # PABX: audits the above
+│   ├── integration-test-writer/     # PABX: apps/backend/__tests__/integration (supertest + DB)
+│   ├── integration-test-validator/  # PABX: audits the above
+│   ├── monorepo-unit-test-writer/   # PABX: other apps/ (node-express/worker, python-fastapi)
+│   └── monorepo-unit-test-validator/# PABX: audits the above
 └── docs/                        # base/reference docs + the workflow guide
 ```
 
@@ -118,12 +124,21 @@ SETUP (once):
   gate-builder                                              (greenfield)
 
 PER FEATURE (repeat):
-  prd-writer → spec-writer → implement-feature → evaluator ⇄ fix-runner
+  prd-writer → spec-writer → implement-feature → evaluator
+                                   │                  │
+                                   │ delegates tests  │ routes fixes:
+                                   ▼                  ├─ code  → fix-runner
+                              test-writer             └─ test  → test-writer → test-validator
 ```
 
+> **Test skills are PABX-specific.** The 6 `*-test-writer`/`*-test-validator` skills assume the
+> PABX monorepo layout (`apps/frontend`, `apps/backend`, `apps/*`). On a non-PABX project,
+> `implement-feature` falls back to writing tests itself. See the guide for details.
+
 - **You invoke** every skill directly **except `fix-runner`** — the `evaluator` dispatches it
-  automatically when an evaluation fails, then re-evaluates until **CLEAN**, **PENDING**, or
-  **ABORTED**.
+  automatically when an evaluation fails. Test failures are routed to the matching
+  **test-writer** (then confirmed by the matching **test-validator**); code failures go to
+  **fix-runner**. It re-evaluates until **CLEAN**, **PENDING**, or **ABORTED**.
 - The `contract.md` (produced by `spec-writer`) is the single source of acceptance criteria
   and quality gates; `implement-feature` satisfies it and `evaluator` checks against it.
 - Shared state lives in `progress.json` (at the root of the project's `docs/`).

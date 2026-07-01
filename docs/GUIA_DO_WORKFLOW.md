@@ -54,11 +54,17 @@ flowchart TD
 | **prd-writer** | Início de um produto novo | descrição do produto | `PRD.md` | — |
 | **spec-writer** | Para cada feature, após o PRD | PRD + feature(s) | `spec.md` + `plan.md` + `contract.md` | — |
 | **implement-feature** | Após a spec da feature | spec + plan + contract | código + testes + commits + `progress.json` | — |
-| **evaluator** | Após implementar a feature | contract.md + progress.json + feature | report + estado + screenshots | **fix-runner** (em FAIL) |
-| **fix-runner** | **Só o evaluator chama** | `evaluation-report.json` | correção + commit | **evaluator** (reavaliação) |
+| **evaluator** | Após implementar a feature | contract.md + progress.json + feature | report + estado + screenshots | **fix-runner** (código) / **test-writer** (teste) |
+| **fix-runner** | **Só o evaluator chama** | `evaluation-report.json` (código) | correção de código + commit | **evaluator** (reavaliação) |
+| **unit/integration/monorepo-unit-test-writer** | Escrita/correção de testes (PABX) | `target_file` (ou `evaluation-report.json` no fix) | testes escritos/corrigidos | — |
+| **unit/integration/monorepo-unit-test-validator** | Auditar testes (PABX) | `test_file_path` | relatório de conformidade (PASS/FAIL) | — |
 
-> 🔑 Você invoca diretamente todas as skills, **exceto `fix-runner`** — essa é acionada
-> automaticamente pelo `evaluator` quando a avaliação falha.
+> 🔑 Você invoca diretamente as skills do fluxo, **exceto `fix-runner`** (só o evaluator chama).
+> As **test-writers/validators** você pode chamar direto (modo interativo, com aprovação) **ou**
+> elas são chamadas automaticamente pelo `implement-feature` (escrita) e pelo `evaluator`
+> (correção de teste, modo autônomo).
+> ⚠️ As 6 skills de teste assumem a estrutura do **monorepo PABX** (`apps/frontend`, `apps/backend`,
+> `apps/*`) — ver a nota de escopo no fim.
 
 ---
 
@@ -159,9 +165,11 @@ flowchart LR
 - **Quando:** após a spec da feature existir (precisa dos **três** arquivos, incluindo o
   `contract.md`).
 - **Entra:** a referência da feature (`F01`, pasta, etc.) + o PRD (auto-descoberto).
-- **Como funciona:** implementa **fase a fase** (do `plan.md`), **cria os testes**, valida
-  cada fase rodando os **gates do contrato**, e **commita 1 commit por fase**. Ao final, faz
-  uma verificação completa (suíte cheia + gates + critérios de aceitação).
+- **Como funciona:** implementa **fase a fase** (do `plan.md`), **delega a escrita dos testes**
+  à test-writer correta (por caminho/stack, em modo autônomo) — ou escreve os testes ele mesmo
+  se o projeto não for PABX (fallback genérico) —, valida cada fase rodando os **gates do
+  contrato**, e **commita 1 commit por fase**. Ao final, faz uma verificação completa (suíte
+  cheia + gates + critérios de aceitação).
 - **Sai:** código + testes + commits + atualização do `progress.json` marcando a feature como
   **`PENDING_EVALUATION`** (pronta para o evaluator).
 - **Não usa** `git add -A`, não cria/troca branch, não pula hooks.
@@ -192,31 +200,45 @@ autoverificação do implementador.
 - **Ele é o dono do loop:** mantém o contador de tentativas (`maxFixAttempts`, default 3) e
   decide quando vira ABORTED.
 
-### Passo 2E — Correção automática: `fix-runner` (você não chama)
+### Passo 2E — Correção automática: roteada por tipo de falha (você não chama)
 
-- **Quem chama:** **o `evaluator`**, automaticamente, quando o estado é FAIL.
-- **Como funciona:** lê o `evaluation-report.json` (o erro estruturado que o evaluator gravou),
-  aplica a **correção mínima** (só o problema apontado, sem refatorar o resto), revalida o
-  gate/teste que falhou, **commita** `fix(F<ID>): <erro>` e **devolve** ao evaluator para
-  reavaliar.
-- **Loop:** evaluator → (FAIL) → fix-runner → (corrige) → evaluator de novo… até **CLEAN**,
-  **PENDING** ou **ABORTED**.
+Quando o `evaluator` acha uma falha, ele **classifica e roteia**:
+
+- **Falha de código** (`kind: gate` / `observable-criterion`) → **`fix-runner`**: correção
+  mínima no código, commit `fix(F<ID>)`, devolve ao evaluator. (Comportamento original.)
+- **Falha de teste** (`kind: test`) → **test-writer correspondente** (escolhida pelo
+  caminho/stack do teste) corrige **só o teste** → **test-validator correspondente** confirma
+  conformidade (PASS) → só então o evaluator **retoma a avaliação de onde parou**.
+
+**A suíte é escolhida pelo caminho do teste** (regra determinística):
+`apps/frontend/*.spec.ts` ou `apps/backend/__tests__/unit/*.test.js` → **unit**;
+`apps/backend/__tests__/integration/` → **integration**; demais `apps/` → **monorepo**.
+
+O **loop e o contador N são sempre do evaluator** — o sub-loop de teste
+(writer→validator) consome o mesmo orçamento de tentativas.
 
 ```mermaid
 sequenceDiagram
     participant Você
     participant Ev as evaluator
     participant Fr as fix-runner
+    participant Tw as test-writer
+    participant Tv as test-validator
 
     Você->>Ev: avalie F01
-    Ev->>Ev: roda gates + critérios
+    Ev->>Ev: roda gates + critérios; classifica falhas
     alt CLEAN
         Ev-->>Você: ✅ pronto
-    else FAIL (attempt < N)
-        Ev->>Fr: corrija (evaluation-report.json)
-        Fr->>Fr: correção mínima + commit
-        Fr-->>Ev: reavalie F01
+    else FAIL código (attempt < N)
+        Ev->>Fr: corrija (kind: gate/observable)
+        Fr-->>Ev: correção + commit → reavalie
         Note over Ev: attempt++ e repete
+    else FAIL teste (attempt < N)
+        Ev->>Tw: corrija o teste (kind: test, autônomo)
+        Tw-->>Ev: teste corrigido
+        Ev->>Tv: valide o teste corrigido
+        Tv-->>Ev: PASS
+        Note over Ev: attempt++ e retoma a avaliação
     else attempt >= N
         Ev-->>Você: ⛔ ABORTED
     else não testável
@@ -309,9 +331,11 @@ flowchart TD
 | gate-builder | ✅ sim | não |
 | prd-writer | ✅ sim | não |
 | spec-writer | ✅ sim (single ou batch) | não |
-| implement-feature | ✅ sim | não |
-| evaluator | ✅ sim | ✅ chama o **fix-runner** em FAIL |
+| implement-feature | ✅ sim | ✅ chama uma **test-writer** (escrita, autônomo) |
+| evaluator | ✅ sim | ✅ **fix-runner** (código) / **test-writer**→**test-validator** (teste) |
 | **fix-runner** | ❌ **não** — só o evaluator | ✅ devolve ao **evaluator** |
+| test-writer (unit/integration/monorepo) | ✅ sim (interativo) ou via skill (autônomo) | não |
+| test-validator (unit/integration/monorepo) | ✅ sim ou via evaluator | não |
 
 ---
 
@@ -322,12 +346,35 @@ flowchart TD
   misture.
 - 📑 **O `contract.md` é a fonte única** de critérios/gates. O evaluator não inventa critérios
   fora dele.
-- 🔁 **O `evaluator` é o dono do loop** (contador, N tentativas, ABORTED). O `fix-runner` é
-  stateless: corrige uma vez e devolve.
+- 🔁 **O `evaluator` é o dono do loop** (contador, N tentativas, ABORTED). Ele **roteia** por
+  tipo: código → `fix-runner`; teste → test-writer→test-validator. Corretores são stateless.
+- 🧪 **Código ≠ teste:** `fix-runner` conserta código; as **test-writers** consertam testes;
+  as **test-validators** confirmam. Nunca mande teste ao fix-runner nem código à test-writer.
 - 💾 **Tudo passa por arquivos em disco** (PRD, contract, progress.json, evaluation-report) —
   o estado sobrevive entre skills e execuções.
 - 🛠️ **Gates antes das features:** rode o `gate-builder` no setup; o `spec-writer` só
   **declara** o que já existe.
+
+---
+
+## Escopo das skills de teste (PABX)
+
+As 6 skills de teste (`unit`/`integration`/`monorepo-unit`-`test-writer`/`validator`) foram
+extraídas de prompts maduros do **monorepo PABX** e assumem sua estrutura:
+
+- **unit-test-*** → `apps/frontend/` (Angular, `.spec.ts`) e `apps/backend/__tests__/unit/` (Node, `.test.js`).
+- **integration-test-*** → `apps/backend/__tests__/integration/` (Jest + supertest, DB de teste real).
+- **monorepo-unit-test-*** → demais `apps/` (node-express / node-worker / python-fastapi).
+
+As **regras hiper-específicas** (mock de jQuery/localStorage, padrão `Promise.all()`,
+`setupTestDatabase`/ordem de FK, mock de GPU/torch, `NODE_ENV=testing`) vivem em
+`references/pabx-rules.md` de cada skill. **Cada skill tem dois modos:** interativo (3 fases +
+aprovação) quando você chama direto; autônomo (sem pausa) quando `implement-feature`/`evaluator`
+as chamam.
+
+> **Projeto não-PABX?** O `implement-feature` detecta e usa o **fallback genérico** (escreve os
+> testes ele mesmo); as skills de teste são específicas do PABX. Para adaptar a outro monorepo,
+> ajuste os `pabx-rules.md`.
 
 ---
 

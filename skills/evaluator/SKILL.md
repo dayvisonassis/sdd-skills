@@ -1,6 +1,6 @@
 ---
 name: evaluator
-description: Externally evaluates an already-implemented feature against its contract.md (environment, quality gates, coverage manifest, observable criteria), producing screenshots, a report, and chat findings. Owns the evaluation loop — keeps the attempt counter in progress.json, decides the state (CLEAN/FAIL/PENDING/ABORTED), and dispatches the fix-runner on FAIL until CLEAN, PENDING, or ABORTED.
+description: Externally evaluates an already-implemented feature against its contract.md (environment, quality gates, coverage manifest, observable criteria), producing screenshots, a report, and chat findings. Owns the evaluation loop — keeps the attempt counter in progress.json, decides the state (CLEAN/FAIL/PENDING/ABORTED), and routes each failure: code failures (gate/observable) to fix-runner, test failures to the matching test-writer (then confirmed by the matching test-validator) before resuming. Loops until CLEAN, PENDING, or ABORTED.
 ---
 
 # Evaluator
@@ -31,8 +31,8 @@ If the feature has no `contract.md`, abort: "No contract.md for F<ID> — genera
 - **Report** — consolidated ✓ / ✗ / — per contract criterion and gate.
 - **Findings in chat** — textual summary for the user.
 - **State in `progress.json`** — CLEAN | FAIL | PENDING | ABORTED for the feature.
-- **On FAIL:** a structured `evaluation-report.json` in the feature folder (consumed by `fix-runner`).
-- The evaluator does **not** edit production code. Corrections are made by `fix-runner`.
+- **On FAIL:** a structured `evaluation-report.json` in the feature folder, with each failure classified by `kind` (consumed by `fix-runner` for code, or a test-writer for tests).
+- The evaluator does **not** edit code or tests itself. Code corrections → `fix-runner`; test corrections → the matching test-writer (confirmed by the matching test-validator).
 
 ---
 
@@ -58,7 +58,11 @@ If the feature has no `contract.md`, abort: "No contract.md for F<ID> — genera
 ### Step 4: Run Quality Gates
 
 - Execute each gate declared in the contract (typecheck, lint, build, tests, arch...). Use the exact commands from the contract.
-- Any gate failing is a contract violation (`kind: gate`, `ref: <gate-id>`). Collect the command + log as evidence.
+- Any gate failing is a contract violation. Collect the command + log as evidence.
+- **Classify each failure by cause** (this drives the correction routing in Step 7):
+  - The failure is a **code failure** (`kind: gate` or `observable-criterion`) when production code is wrong — a type error, lint/build/arch violation, or a missing observable behavior.
+  - The failure is a **test failure** (`kind: test`) when the test itself is broken/non-conforming — e.g. the `tests` gate fails and the cause is the test file (missing/incorrect mock, wrong pattern, a test that no longer matches correct behavior), not the production code. For a `kind: test` failure, fill the routing fields (`testSuite`, `testFile`, `targetFile`) per `references/evaluation-report-schema.md`.
+  - When ambiguous (a failing test that might reflect a real code bug), prefer `kind: gate`/`observable-criterion` and let `fix-runner` handle the code; only route to a test-writer when the test is clearly the thing that is wrong.
 - (If `gates only` override is set, skip Step 5 and go to Step 6 with just gate results.)
 
 ### Step 5: Validate Surfaces & Observable Criteria
@@ -78,21 +82,41 @@ Determine the feature's state strictly from contract adherence — never from "l
 
 List exactly which gates/criteria failed.
 
-### Step 7: Correction Loop (when FAIL)
+### Step 7: Correction Loop (when FAIL) — route by failure kind
 
 - Read `attempt` and `maxFixAttempts` (N) from `progress.json`.
 - **If `attempt >= N`** → set `state: ABORTED`; stop and report (the loop tried N times without converging). Proceed to Step 9.
 - **Else:**
-  1. Write/refresh `evaluation-report.json` in the feature folder (schema in `references/evaluation-report-schema.md`) with the current `attempt` and the `failures[]`.
+  1. Write/refresh `evaluation-report.json` in the feature folder (schema in `references/evaluation-report-schema.md`) with the current `attempt` and the classified `failures[]`.
   2. Set `state: FAIL` in `progress.json` and persist the report path in `lastEvaluationReport`.
-  3. **Dispatch `fix-runner`** via the Skill tool (or as a subagent), passing the feature ID and the path to `evaluation-report.json`. The on-disk report is the source of truth.
-  4. When `fix-runner` returns:
-     - If it reports "correction applied" → **increment `attempt`** in `progress.json`, then **re-evaluate**: go back to Step 3.
-     - If it reports "not resolved — <reason>" → still increment `attempt` (a real attempt was spent); if `attempt >= N` set `ABORTED`, else re-evaluate (Step 3). Do not loop forever without incrementing.
+  3. **Route each failure by `kind`:**
+     - **`kind: gate` / `observable-criterion` (code)** → **dispatch `fix-runner`**, passing the feature ID and the report path. Unchanged behavior — the on-disk report is the source of truth.
+     - **`kind: test`** → run the **test-correction sub-flow (Step 8)** for that failure. Never send test failures to `fix-runner`.
+  4. When the dispatched correction returns:
+     - Correction applied → **increment `attempt`** in `progress.json`, then **re-evaluate**: go back to Step 3.
+     - "not resolved — <reason>" → still increment `attempt`; if `attempt >= N` set `ABORTED`, else re-evaluate. Do not loop without incrementing.
 
-The evaluator **owns** the counter, the limit N, and the ABORTED decision. The `fix-runner` is stateless and never decides when to stop.
+The evaluator **owns** the counter, the limit N, and the ABORTED decision. Correction skills are stateless and never decide when to stop.
 
-### Step 8: (reserved — loop body lives in Step 7)
+### Step 8: Test-correction sub-flow (`kind: test`)
+
+For a test failure, correcting the code is the wrong move — fix the test, then re-confirm it
+conforms. Select the suite from `testSuite`/`testFile` (deterministic rule in the schema):
+`unit` → `unit-test-*`, `integration` → `integration-test-*`, `monorepo` → `monorepo-unit-test-*`.
+
+1. **Fix the test** — dispatch the matching **test-writer** in **correction mode** (autonomous),
+   passing the feature ID, the `evaluation-report.json` path, `testFile`, and `targetFile`. It
+   fixes only the flagged test (smallest footprint), never production code.
+2. **Confirm conformance** — dispatch the matching **test-validator** on the corrected `testFile`.
+   - Verdict **PASS** (or PASS WITH WARNINGS) → the test now conforms; **resume the evaluation
+     where it left off** (re-run Step 3+ / the failing gate) and continue.
+   - Verdict **FAIL** → the correction did not conform. Treat this round as a spent attempt:
+     increment `attempt`; if `attempt >= N` → `ABORTED`; else loop (dispatch the test-writer again
+     with the validator's findings, then re-validate).
+3. Only after the test-validator returns PASS does the evaluator continue its own evaluation.
+
+> The test-writer/validator pair is a **sub-loop inside** the evaluator's main loop. It still
+> consumes the single `attempt`/N budget — never iterate the sub-loop without incrementing.
 
 ### Step 9: Persist State & Report
 
@@ -139,15 +163,18 @@ Next:
 - Run the contract's Quality Gates as objective checks before/with functional inspection.
 - Derive the state from contract adherence, with evidence per criterion.
 - Own the loop: keep `attempt`/`maxFixAttempts` in `progress.json` and decide CLEAN/FAIL/PENDING/ABORTED.
-- On FAIL, write `evaluation-report.json` and dispatch `fix-runner`; re-evaluate after each correction until CLEAN, PENDING, or ABORTED.
-- Increment `attempt` once per fix-runner round; never loop without incrementing.
+- Classify each failure by kind and route it: `gate`/`observable-criterion` → `fix-runner`; `test` → the matching test-writer (then confirmed by the matching test-validator).
+- After a `kind: test` correction, require the **test-validator PASS** before resuming the evaluation.
+- Re-evaluate after each correction until CLEAN, PENDING, or ABORTED.
+- Increment `attempt` once per correction round (code or test); never loop without incrementing.
 
 **Never:**
-- Alter production code or "fix" the feature yourself — correcting is the `fix-runner`'s job.
+- Alter production code or "fix" the feature yourself — code corrections are the `fix-runner`'s job, test corrections are the test-writers' job.
+- Send a `kind: test` failure to `fix-runner`, or a `kind: gate`/`observable-criterion` failure to a test-writer.
 - Approve based on visual perception without running the objective gates.
 - Evaluate a feature without a `contract.md`.
 - Invent criteria not present in the contract.
-- Exceed `maxFixAttempts` without marking ABORTED.
+- Exceed `maxFixAttempts` without marking ABORTED (the test sub-loop shares the same budget).
 - Write `PENDING_EVALUATION` into `progress.json` — that is the implementer's pre-state; the evaluator writes CLEAN/FAIL/PENDING/ABORTED.
 - Confuse an environment failure (PENDING) with an implementation failure (FAIL).
 

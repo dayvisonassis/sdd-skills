@@ -1,6 +1,6 @@
 ---
 name: implement-feature
-description: Implements a feature autonomously based on its spec, plan, AND contract.md, committing one commit per phase, satisfying the contract's quality gates and observable criteria, writing progress.json, and reporting results against the feature's acceptance criteria.
+description: Implements a feature autonomously based on its spec, plan, AND contract.md, committing one commit per phase, satisfying the contract's quality gates and observable criteria, writing progress.json, and reporting results against the feature's acceptance criteria. Delegates test writing to the matching test-writer skill (unit/integration/monorepo) by path/stack when the project fits, and falls back to writing tests itself otherwise.
 ---
 
 # Implement Feature
@@ -118,6 +118,22 @@ Read spec.md sections relevant to the phase. Edit/create files to fulfill the ph
 - If the phase produces runtime behavior that isn't covered by unit tests (UI pages, server routes, migrations, CLI commands), actually exercise it before claiming done: run the dev server / build / migration / command against a local environment and confirm it behaves. If the environment can't be brought up in this run, log the runtime-check under `Soft-fails`.
 
 Writing code without running it is not "done". Declaring completion without meeting the checklist above is a violation of the skill's contract.
+
+**Writing the tests — delegate to a test-writer when applicable.** When a phase needs tests,
+**delegate** to the matching test-writer skill (dispatched in **autonomous** mode) instead of
+writing them inline, choosing the suite deterministically by the test's path/stack:
+
+- `*.spec.ts` in `apps/frontend/` **or** `*.test.js` in `apps/backend/__tests__/unit/` → **`unit-test-writer`**
+- any file under `apps/backend/__tests__/integration/` → **`integration-test-writer`**
+- any other app under `apps/` (`*.test.ts` or `test_*.py`) → **`monorepo-unit-test-writer`**
+
+Pass the `target_file` and the phase context. The test-writer applies the project's testing
+rules and returns; keep implementing the phase.
+
+**Generic fallback:** if the project is **not** the PABX monorepo (no `apps/` layout) or the
+stack matches none of the three writers (e.g. Go, Rust, Python non-FastAPI), **write the tests
+yourself** as before. Record in `Deviations` that the generic fallback was used (which files,
+why no test-writer applied).
 
 Adapt when reality diverges from the spec (column named `pinned` in DB vs `isPinned` in spec, different component file name, slightly different path, structurally compatible types). Specs are never 100% faithful to reality — adaptation is expected. Record every adaptation in a `Deviations` list. Do NOT abort on minor divergences.
 
@@ -279,6 +295,7 @@ If aborted, the report still lists whatever committed phases achieved and clearl
 - Adapt to minor spec/code divergences; log every adaptation under `Deviations`.
 - Run validation after each phase, including the contract's Quality Gates; differentiate hard-fail (retry ≤ limit) from soft-fail (skip + log) from pre-existing failure (log, don't retry).
 - Before claiming a phase is "done": confirm every file listed for that phase exists with the described content AND validation has passed. Writing code without running it is never "done".
+- Delegate test writing to the matching test-writer (by path/stack, autonomous mode) when the project fits; otherwise write the tests yourself (generic fallback) and log it under `Deviations`.
 - For phases that produce runtime surfaces, actually exercise them against a local environment (per the contract's Environment Contract) before claiming done, or soft-fail the runtime check.
 - Execute Step 6 (Final Verification) in full, including all contract Quality Gates, before reporting.
 - Write `progress.json` (Step 7) on completion; set `PENDING_EVALUATION` on success.

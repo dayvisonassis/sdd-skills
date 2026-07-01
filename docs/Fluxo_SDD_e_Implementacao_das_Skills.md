@@ -111,15 +111,21 @@ sessão). Três handoffs importam:
 ```mermaid
 flowchart LR
     SPEC["spec-writer"] -->|"contract.md"| IMPL["implement-feature"]
+    IMPL -->|"delega escrita"| TW["test-writer"]
     IMPL -->|"código + testes"| EVAL["evaluator"]
     SPEC -->|"contract.md (critérios/gates)"| EVAL
-    EVAL -->|"evaluation-report (FAIL)"| FIX["fix-runner"]
+    EVAL -->|"kind: gate/observable"| FIX["fix-runner"]
+    EVAL -->|"kind: test"| TW
+    TW -->|"teste corrigido"| TV["test-validator"]
+    TV -->|"PASS"| EVAL
     FIX -->|"commit + 'reavalie F<ID>'"| EVAL
     EVAL -->|"estado em progress.json"| ALL["orquestração"]
 
     style SPEC fill:#e3f2fd,stroke:#1565c0
     style EVAL fill:#fff3e0,stroke:#e65100
     style FIX fill:#fff3e0,stroke:#e65100
+    style TW fill:#fff3e0,stroke:#e65100
+    style TV fill:#fff3e0,stroke:#e65100
 ```
 
 ### 4.1 `spec-writer` → `contract.md`
@@ -127,25 +133,45 @@ O `contract.md` é a **fonte única** de critérios de aceitação e gates. Estr
 [Contrato de Feature](./Contrato_de_Feature.md): contrato de ambiente, gates de qualidade,
 manifesto de cobertura, critérios observáveis.
 
-### 4.2 `evaluator` → `fix-runner` (relatório de erro)
-Em FAIL, o `evaluator` **grava um relatório estruturado em disco** que o `fix-runner`
-consome. Campos mínimos (ver [Skill Fix Runner](./Skill_Fix_Runner.md)):
+### 4.2 `evaluator` → correção (relatório de erro roteado por `kind`)
+Em FAIL, o `evaluator` **grava um relatório estruturado em disco** e roteia cada falha pelo
+campo `kind`. Campos (ver [evaluation-report schema](./Skill_Evaluator.md) e o schema completo
+no pacote):
 
 ```yaml
 feature: F<ID>
 attempt: <N>
 status: FAIL
 failures:
-  - kind: gate | test | observable-criterion
+  - kind: gate | test | observable-criterion   # roteamento
     ref: <id do gate/critério no contract.md>
     message: <mensagem objetiva>
-    location: <arquivo:linha | rota | comando>   # quando aplicável
-    evidence: <log | caminho do screenshot>      # quando aplicável
+    location: <arquivo:linha | rota | comando>
+    evidence: <log | caminho do screenshot>
+    # quando kind == test:
+    testSuite: unit | integration | monorepo
+    testFile: <caminho do teste que falhou>
+    targetFile: <fonte de produção coberta>
 ```
 
-### 4.3 `fix-runner` → `evaluator` (devolução)
-O `fix-runner` commita a correção, registra a tentativa no `progress.json` e sinaliza
-"reavalie F<ID>" (ou "não resolvido — motivo"). **Quem reconfirma é o `evaluator`.**
+- `kind: gate | observable-criterion` (**código**) → `fix-runner`.
+- `kind: test` (**teste**) → **test-writer** correspondente (por `testSuite`/`testFile`),
+  depois **test-validator** correspondente confirma PASS antes de retomar.
+
+**Seleção determinística da suíte** (o evaluator deriva de `testFile`):
+`apps/frontend/*.spec.ts` ou `apps/backend/__tests__/unit/*.test.js` → `unit`;
+`apps/backend/__tests__/integration/` → `integration`; demais `apps/` → `monorepo`.
+
+### 4.3 `fix-runner` → `evaluator` (devolução — código)
+O `fix-runner` commita a correção de **código**, registra a tentativa no `progress.json` e
+sinaliza "reavalie F<ID>" (ou "não resolvido — motivo"). **Quem reconfirma é o `evaluator`.**
+Falhas de teste **não** são do fix-runner.
+
+### 4.4 `evaluator` → test-writer → test-validator (devolução — teste)
+Para `kind: test`, o evaluator chama a **test-writer** (modo autônomo, correction mode) que
+corrige **só o teste apontado**, depois a **test-validator** que audita e devolve um verdict
+(PASS/FAIL). Só com **PASS** o evaluator retoma a avaliação. O sub-loop consome o mesmo
+contador `attempt`/N.
 
 ---
 

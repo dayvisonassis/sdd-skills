@@ -219,6 +219,12 @@ Produce `contract.md` using `references/contract-template.md`. It has four block
 least one Observable Criterion (or a gate, when the AC is purely technical). The gate/criterion
 `id`s are the same `ref` values the `evaluator` will cite in `evaluation-report.json`.
 
+**(Optional) Test-suite hint (PABX monorepo):** when the project has distinct test suites
+(e.g. the PABX monorepo — unit / integration / monorepo-unit), you MAY note, next to the
+`tests` gate or a surface, which suite covers it. This helps the `evaluator` route a test
+failure to the right test-writer, though the evaluator can also derive the suite from the
+failing test's path. Keep it lightweight — do not over-specify.
+
 **Announce:** "Three documents ready. Proceeding to save..."
 
 ### Step 5: Validate and Save

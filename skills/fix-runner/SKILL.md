@@ -14,6 +14,12 @@ A surgical corrector. When the `evaluator` returns **FAIL**, it dispatches `fix-
 
 **This skill is stateless about the loop.** The `evaluator` owns the attempt counter, the limit N, and the ABORTED decision. `fix-runner` performs **one** correction per invocation.
 
+**Scope — code, not tests.** `fix-runner` corrects **production code** for failures the evaluator
+classifies as `kind: gate` or `kind: observable-criterion`. **Test failures (`kind: test`) are
+NOT its job** — the evaluator routes those to the matching test-writer (confirmed by the matching
+test-validator). If a report handed to `fix-runner` contains only `kind: test` failures, return
+"not resolved — test failures must be routed to a test-writer" without touching code.
+
 ## INPUT
 
 - **Target feature** (ID) and the **path to `evaluation-report.json`** (passed by the evaluator). The on-disk report is the source of truth.
