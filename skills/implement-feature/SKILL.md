@@ -119,7 +119,7 @@ Read spec.md sections relevant to the phase. Edit/create files to fulfill the ph
 
 Writing code without running it is not "done". Declaring completion without meeting the checklist above is a violation of the skill's contract.
 
-**Frontend UI phases — consult the design system FIRST.** When a phase creates or modifies Angular templates/styles (`.html` / `.component.css` under `apps/frontend/`), **read the design system BEFORE writing the UI** — invoke the `pabx-design-system` skill, or read its tracked source `.cursor/rules/angular-material-20.mdc`. Follow it for both:
+**Frontend UI phases — consult the design system FIRST.** When a phase creates or modifies Angular templates/styles (`.html` / `.component.css` under `apps/frontend/`), **read the design system BEFORE writing the UI** — invoke the `pabx-design-system` skill, or read its bundled reference `.claude/skills/pabx-design-system/references/angular-material.md`. Follow it for both:
 - the **deterministic** rules the `styles-frontend` contract gate enforces (no `color=` on buttons, legacy `mat-*` button API, no `mat-paginator`, no `.component.scss`, no `!important` on `--mat/--mdc` tokens, `aria-label` on `mat-icon-button`, tokens over hardcoded colors) — getting these right up-front avoids gate retries in 5.3; and
 - the **subjective/visual** rules the gate cannot check (compact density, information hierarchy, 4px spacing scale, page shell / `table-section` / `dash-card` patterns, empty + loading states inside the data container, tokenized light/dark) — these are only honored if you read the doc.
 
