@@ -21,9 +21,19 @@ nenhum arquivo externo (IDE, `.cursor`, etc.). **Leia e edite direto em `referen
   `table-section`, `dash-card`, diálogos compactos, tokens `--mat-sys-*`/`--app-*`, convenção de
   botões `.btn-primary-green`/`.btn-secondary`, etc.).
 - Ao **revisar UI**: confira o código contra a lista de anti-padrões do documento.
-- Como **base do gate `styles-frontend`**: o subconjunto determinístico dessas regras (uso de
-  `color=`, API `matButton`, `mat-paginator`, `.component.scss`, `!important` em tokens,
-  `aria-label` em `mat-icon-button`, cor hardcoded) é verificado automaticamente sobre os arquivos
-  alterados. As regras subjetivas/visuais (densidade, hierarquia, estética) **não** são gate —
-  ficam como guia e são checadas via verificação visual (browser-MCP), conforme a seção
+- Como **base do gate `styles-frontend`**: o subconjunto determinístico dessas regras é verificado
+  automaticamente sobre os arquivos alterados —
+  uso de `color=`, API `matButton`, `mat-paginator`, `.component.scss`, `!important` em tokens,
+  `aria-label` em `mat-icon-button`, cor hardcoded (advisory), **diálogo com `mat-form-field` cujo
+  `styleUrls` não declara `--mat-form-field-container-height`** e **página de listagem paginada sem
+  `tails-filter-drawer`**. As regras subjetivas/visuais (densidade, hierarquia, estética) **não** são
+  gate — ficam como guia e são checadas via verificação visual (browser-MCP), conforme a seção
   "Visual Verification" do documento.
+
+## Ao auditar uma tela existente (retrofit)
+
+Não conclua conformidade por grep. As classes registram a **intenção**; só os valores computados
+provam a **aplicação** — num retrofit real, todos os 6 diálogos de um módulo tinham a estrutura
+correta e renderizavam campos de 48px em vez dos 38px da especificação, porque nenhum CSS declarava
+o token. Leia as seções **"Audit by value, not by class presence"** e **"Measurement recipes"** antes
+de auditar, e meça no browser cada regra numérica (alturas, fontes, paddings).
