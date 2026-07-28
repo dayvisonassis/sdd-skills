@@ -64,8 +64,28 @@ From `Como_criar_gates.md`, choose the gates the project needs, mapped to the de
 | `tests` | Behavior | unit/integration test command | Architecture §11 |
 | `arch` | Boundaries | dependency-cruiser rules + custom `check-architecture` script | Deep §2/§9 anti-patterns |
 | `deadcode` | Hygiene | knip (or equivalent) | Deep test gaps / unused code |
+| `design-system` | UI conformance | stylelint (CSS) + custom template lint rules (HTML/JSX) + filename checks | a **design-system doc** of the project (see below) + the **dominant UI patterns** in the code |
 
 Tailor `arch` to the **anti-patterns and rules surfaced in the reports**: e.g. forbid `domain → infrastructure` imports (circular deps in Deep §9), restrict `process.env` to a single `env` module (Deep §2.5 scattered config), forbid `try-catch` in handlers, flag God objects. Only include gates that make sense for the stack — do not invent a `build` gate for a pure library with no build, etc.
+
+### The `design-system` gate (conditional — only when a design-system doc exists)
+
+Propose this gate **only if the project has a design-system / UI-standards document**. Detect it, in order:
+1. a dedicated skill's references folder — `**/.claude/skills/*/references/*.md` whose content is UI/design guidance (e.g. `pabx-design-system/references/angular-material.md`);
+2. `.cursor/rules/*.mdc` (Cursor rules) describing UI/component/style standards;
+3. `docs/**/design*.md`, `docs/**/ui*.md`, or a Storybook/tokens doc.
+
+If none exists, **do not build this gate** (there is nothing to enforce against). Never invent design rules.
+
+**Shared source must be tracked.** The gate config, `runGate`, and `GATES.md` must reference the design-system doc at a **git-tracked** path (so the team/CI has it). Beware: skill folders like `.claude/skills/` are frequently **gitignored** — a doc living only there is local and would vanish from the shared repo. If the canonical doc is in a tracked location (e.g. `.cursor/rules/*.mdc`, `docs/`), point everything there; a local skill may exist as a convenience pointer but must not be the shared source of truth.
+
+**Deterministic-only policy (critical).** A design-system doc mixes two kinds of rule:
+- **Machine-checkable** (deterministic): banned component APIs/attributes, required a11y attributes, forbidden file types, hardcoded values vs. design tokens, `!important` on tokens, banned widgets. → these become the gate.
+- **Subjective/visual**: information density, hierarchy, spacing "feel", aesthetics, empty/loading placement semantics. → these **never** enter the gate; they stay as guidance + a visual-verification step (e.g. browser-MCP). Do not attempt to gate aesthetics.
+
+**Derive rules from the REAL dominant pattern, not only the doc.** For each candidate rule, measure the codebase: count conforming vs. non-conforming occurrences and adopt the **majority** as the enforced standard, reconciling with the doc. If the doc and the code disagree, surface the divergence for the user to decide before encoding the rule. If there is no clear majority (~50/50), make the rule **advisory** (warning) or leave it out this phase. This keeps the gate from fighting the app's current standard.
+
+**Tooling & scoping.** CSS → stylelint with a **minimal** config (only the project's rules; avoid a heavy preset that fights the formatter) plus a small **local stylelint plugin** for project-specific rules (e.g. token-only colors that still allow `var(--token, #hex)` fallbacks; no `!important` on `--*` tokens). HTML/JSX templates → custom lint rules on the framework's template AST (e.g. a local ESLint plugin / `--rulesdir` for Angular templates) — most design-system rules have no built-in equivalent, so expect to author them. Filename bans (e.g. no `.component.scss`) → a name check in `runGate`. **Always changed-files-scoped** in brownfield (the codebase will have thousands of legacy violations); enforce zero-warnings on new/changed files only. Start noisy/high-legacy rules (e.g. hardcoded colors) as **advisory** and ratchet to blocking after remediation.
 
 ### Step 4: Produce the Gate Plan (Phase 1 output)
 
@@ -121,6 +141,8 @@ For each selected gate, in `runGate` order:
 
 - Create a single entry point (`scripts/runGate.mjs` or the stack's idiom) that runs the gates **in order, cheapest first** (`typecheck → lint → build → arch → tests → deadcode`), **stops at the first failure**, and exits non-zero on any failure.
 - Add a top-level `gate` script that invokes it. The orchestrator is what local dev, CI, and the SDD agents (`implement-feature`, `evaluator`) will call.
+
+**Registry shape (reconcile with the actual code).** The Phase-1 plan describes each gate conceptually as `id + command + scope + description`, but the emitted orchestrator registers gates as a concrete array of objects with exactly three fields: `{ id, label, run }`, where `run: () => boolean` (true = pass) wraps the command **and** the scoping inside a closure (there is no separate `command`/`scope` field). Changed-files scoping is computed once (git diff vs the base ref) and applied inside each `run` via a shared helper (e.g. `lintGate`/`stylesGate` that filters the changed set to the app + extensions and no-ops to `true` when empty). To add a gate: push one `{ id, label, run }` object into the array (in cheap→expensive order), add a matching `gate:<id>` script, and document it in `GATES.md`. Note the runner does **not** read `contract.md` — the SDD agents do, invoking `npm run gate:<id>` per the ids a feature declares.
 
 ### Step 7: Verify Each Gate Runs
 
