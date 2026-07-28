@@ -87,6 +87,13 @@ If none exists, **do not build this gate** (there is nothing to enforce against)
 
 **Tooling & scoping.** CSS → stylelint with a **minimal** config (only the project's rules; avoid a heavy preset that fights the formatter) plus a small **local stylelint plugin** for project-specific rules (e.g. token-only colors that still allow `var(--token, #hex)` fallbacks; no `!important` on `--*` tokens). HTML/JSX templates → custom lint rules on the framework's template AST (e.g. a local ESLint plugin / `--rulesdir` for Angular templates) — most design-system rules have no built-in equivalent, so expect to author them. Filename bans (e.g. no `.component.scss`) → a name check in `runGate`. **Always changed-files-scoped** in brownfield (the codebase will have thousands of legacy violations); enforce zero-warnings on new/changed files only. Start noisy/high-legacy rules (e.g. hardcoded colors) as **advisory** and ratchet to blocking after remediation.
 
+**Cross-file structural checks — how to gate rules that look subjective.** A linter sees one file at a time, so rules like "dialogs must use the compact density" or "listing pages must use the filter sidebar" get filed as subjective and left ungated. Often they are not: implement them as a **small check in `runGate`** that reads a changed template and then follows the component's own references to verify the rule. Two proven examples:
+
+- *Density*: a template that is a dialog (contains the dialog-content/actions markers) **and** has form fields → parse `styleUrls` from the sibling component file, resolve each path, and require that the **union** of those CSS files declares the density token (e.g. `--mat-form-field-container-height`). This catches a whole family of screens silently rendering the framework default instead of the specified height — a gap no single-file lint and no grep can see.
+- *Required composition*: a template with the page-shell + table + pagination markers must also contain the filter-sidebar component.
+
+Guidelines: derive the "is this file of kind X?" test from markers already in the template (no config to maintain); emit a message that names the file **and the fix**; keep it changed-files-scoped like the rest; and **validate fail→fix→pass** by deliberately breaking one file, confirming a non-zero exit, then restoring. Measure the blast radius on the existing codebase first — if most legacy files violate the rule, either narrow the "kind X" test (e.g. only *pages*, excluding tables embedded in dialogs/dashboards) or make it advisory.
+
 ### Step 4: Produce the Gate Plan (Phase 1 output)
 
 Present a plan and **await explicit confirmation** before writing anything. Template:

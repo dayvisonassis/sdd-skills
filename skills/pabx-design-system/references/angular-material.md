@@ -535,6 +535,12 @@ These classes MUST be applied consistently across all data table views:
 
 Every data-listing page MUST use the `FilterDrawerComponent` to provide a filter sidebar that opens from the right. Do NOT use inline form fields in the table header for filtering.
 
+#### Scope of the rule
+
+- **Applies to listing *pages*** — templates that use the page shell (`content-wrapper`) with a `table-section` and `tails-pagination`.
+- **Applies even when the page has no filters yet.** A listing page with no search/filter UI at all is NOT compliant — the absence of *inline* filters is not evidence of compliance. Check the service: it usually already accepts a `search` param that no UI is calling, so adding the drawer both fixes the design and unlocks an existing capability.
+- **Does NOT apply** to tables embedded in dialogs or drill-down panels of a dashboard (result dialogs, campaign sub-tables). A filter sidebar makes no sense there; those tables are already scoped by the parent context.
+
 #### Integration Pattern
 
 The `<tails-filter-drawer>` component uses content projection (`<ng-content>`). The table section is placed **inside** the drawer as projected content:
@@ -590,20 +596,38 @@ Available field types: `text`, `select`, `multi-select`, `date`, `date-range` (w
 #### Filter Handlers Pattern
 
 ```typescript
-onFiltersApplied(values: Record<string, any>): void {
-  this.filterValues = { ...values }
+// Type ALIAS with optional props — not an interface. A type alias gets the implicit
+// index signature required by the drawer's `@Input() values: Record<string, any>`,
+// and typing the values avoids `any` (which fails the zero-warnings lint gate).
+type MyFilterValues = {
+  search?: string
+  status?: string
+}
+
+filterValues: MyFilterValues = { search: '', status: '' }
+
+onFiltersApplied(values: MyFilterValues): void {
+  this.search = values.search ?? ''
+  this.statusFilter = values.status ?? ''
   this.page = 1
+  this.syncFilterValues()
   this.loadData()
 }
 
+// Must NOT fetch: clearAllFilters() emits `cleared` AND `applied`. Fetching in both
+// handlers fires two requests for one user action.
 onFiltersCleared(): void {
-  this.filterValues = { search: '', status: '' }
-}
-
-onChipRemoved(_key: string): void {
-  this.onFiltersApplied(this.filterValues)
+  this.resetFilterState()
 }
 ```
+
+#### Wiring rules
+
+- **`(chipRemoved)` is unnecessary** — `removeChip()` emits `applied` right after, which already reloads. Binding it and re-applying causes a duplicate request; leaving an empty handler forces a comment, which the PABX project forbids in production code. Omit the binding.
+- **Rebuild `filterConfig` when async options arrive.** Options for queues/categories/tags load after `ngOnInit`; assign a **new array** to `filterConfig` in each subscription so the drawer's `ngOnChanges` picks it up. Mutating the existing array does nothing.
+- **When retrofitting an existing screen, preserve its public API.** Existing specs set individual filter properties (`statusFilter`, `search`) and call `applyFilters()` / `clearFilters()` directly. Keep those as the source of truth that `loadData()` reads, and let the drawer *feed* them via `onFiltersApplied`. Never adapt the spec to the refactor (see "Test Compatibility").
+- **The drawer's own CSS classes are not global.** `.filter-toggle-btn`, `.filter-badge`, `.active-filters-bar`, `.filter-chip`, `.chip-key`, `.chip-remove`, `.clear-filters-link` and `.header-actions` must be present in the component's styles — a screen that projects the markup without them renders the filter UI unstyled. Prefer a shared base CSS per module (see "Shared Base CSS") over copying the block into every screen.
+- The generic empty option renders as **"Todos"** for every `select`, including grammatically feminine labels (Prioridade, Fila, Categoria). It comes from the shared component and is consistent platform-wide — do not fork the drawer to fix agreement.
 
 #### Filter Button & Badge CSS
 
@@ -1495,6 +1519,26 @@ Auth card container (`auth.component.css`) applies:
 - Logo: 36px height, centered
 - Copyright: 12px, muted, below card
 
+### Shared Base CSS — generalize the `auth.base.css` pattern
+
+`auth.base.css` is not a one-off: **a `*.base.css` added to `styleUrls` is the accepted way to share styles across a family of components in the same module.** Use it whenever the same block would otherwise be copied into three or more components — most often the compact-dialog overrides and the filter-bar classes.
+
+```typescript
+// One shared file per concern, at the module root
+@Component({
+  styleUrls: ['./customer-form.component.css', '../../ticket-dialog.base.css']
+})
+```
+
+Reference implementation: the tickets module ships `ticket-dialog.base.css` (compact dialog: title/content/actions, 38px form fields, 12px labels/options, compact checkbox, `.section-label`) and `ticket-filter-bar.base.css` (filter toggle button, badge, active-filter chips bar).
+
+Rules:
+
+- **Plain class selectors work** in a base file — they still get the component's scoping attribute. Use `:host ::ng-deep` only where you would in the component's own CSS.
+- **Target Material structural parts by CLASS, never by element.** Both forms exist in this codebase: `<mat-dialog-content>` and `<div mat-dialog-content>` (the attribute form is the more common one). An element selector like `mat-dialog-actions { ... }` silently misses every attribute-form dialog and the padding/border never applies. Always use `.mat-mdc-dialog-content` / `.mat-mdc-dialog-actions`.
+- When you create a base file, **remove the now-duplicated blocks** from the components that already had them, so there is a single source of truth.
+- A new dialog or listing in a module that has a base file must **include the base file**, not re-declare the overrides.
+
 ### mat-card Padding Reset
 
 Angular Material's `<mat-card>` renders internally as a `.mdc-card` element with **`padding: 8px 16px`** applied by Material's compiled styles. This padding is **in addition to** any padding set on child elements (`mat-card-header`, `mat-card-content`, `mat-card-actions`). If you only override the children's padding, the card itself still adds its own, resulting in excessive spacing.
@@ -1805,6 +1849,11 @@ All sentiment badges (positive, negative, neutral) use `color: #fff` for consist
 53. **Decorative icons and IDs in dialog titles** — Dialog titles should be clean text only (e.g. "Inteligência de voz"). Do NOT add decorative icons (like `psychology`) or internal IDs (like `callId`) to dialog titles. Use a simple close button with 30px state layer
 54. **Dark text on colored sentiment badges** — Status/sentiment badges with colored backgrounds (positive=green, negative=red, neutral=grey) MUST use `color: #fff` for text. Never inherit the default text color — it becomes illegible on colored backgrounds
 55. **Empty state hints not centered** — Empty state messages (like "Selecione colunas ao lado para definir a ordem") inside dialogs MUST use `display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center` to center both vertically and horizontally, with the icon above the text
+56. **Listing page with no filter UI at all** — A `content-wrapper` page with a `table-section` and `tails-pagination` and *no* search/filter is NOT compliant. Having no inline filters is not compliance with anti-pattern #23; the drawer is required regardless. Check the service — it usually already accepts a `search` param that no UI calls
+57. **Duplicating dialog/filter overrides per component** — When three or more components in a module need the same compact-dialog or filter-bar block, extract a `*.base.css` and add it to each `styleUrls` (see "Shared Base CSS"). Do NOT copy the block into each component, and do NOT ship a screen that uses the filter-drawer markup without those classes — it renders unstyled
+58. **Targeting Material dialog parts by element selector** — Use `.mat-mdc-dialog-content` / `.mat-mdc-dialog-actions`, never `mat-dialog-content` / `mat-dialog-actions` as element selectors. Most dialogs use the attribute form (`<div mat-dialog-content>`), which an element selector silently misses — the padding and separators never apply and nothing errors
+59. **Concluding compliance from grep** — Do NOT report a screen as design-system compliant because the expected classes exist. Classes record intent; only the computed values prove application. Measure the numeric rules in the browser (see "Audit by value, not by class presence")
+60. **Fetching in both `cleared` and `applied`** — `clearAllFilters()` emits `cleared` **and** `applied`. Reload data in the `applied` handler only; doing it in both fires two requests per user action. Likewise, do not bind `(chipRemoved)` — `removeChip()` also emits `applied`
 
 ## Visual Verification — Mandatory Browser MCP Usage
 
@@ -1822,28 +1871,39 @@ You MUST open the affected page/component in the browser and visually inspect it
 6. **Dashboard cards** — verify card density, value sizing, grid responsiveness
 7. **Table sections** — verify row height, header styling, empty state, pagination placement
 
-### Verification Checklist
+### Audit by value, not by class presence
 
-When using the browser MCP, confirm:
+**The single most common audit error is concluding compliance from the presence of a class.** A template that has `table-section`, `empty-state` and `subscriptSizing` can still be entirely off-spec, because the classes say what was *intended*, not what *renders*. In a real retrofit, every screen had `table-section` and every dialog looked structurally correct, yet all six dialogs rendered 48px form fields (Material's default) instead of the 38px this document specifies — no CSS in the module set `--mat-form-field-container-height` at all. Grep found nothing because there was nothing to find; only measuring the rendered output exposed it.
 
-- [ ] Component renders without visual breakage (no overflow, no misalignment)
-- [ ] Typography matches the scale defined in this document (12–14px body, not 16px default)
-- [ ] Spacing follows the 4px grid (no inconsistent gaps or padding)
-- [ ] Colors use semantic tokens (not hardcoded values visible as wrong hue in dark mode)
-- [ ] Interactive states work (hover, focus, disabled appear correctly)
-- [ ] Data density target is met (maximum visible rows/data without scrolling)
-- [ ] Empty and loading states render inside their data container
-- [ ] Dark mode (if applicable): toggle theme and verify no broken contrast or invisible elements
+So when auditing an existing screen:
+
+- Grep answers "is the pattern referenced?" — it never answers "is the pattern applied?". Treat a grep pass as a **starting point**, not a result.
+- For every numeric rule in this document (heights, font sizes, padding), read the **computed value** in the browser and compare it to the table.
+- Check that the token is actually *declared somewhere in the component's `styleUrls` union*, not just that the markup looks right.
+
+### Measurement recipes (avoid false readings)
+
+These specific measurements are easy to get wrong, and a wrong reading sends you chasing a bug that does not exist:
+
+| What | Measure this | Not this |
+|---|---|---|
+| Form field height | `.mat-mdc-text-field-wrapper` → **38px** | `.mat-mdc-form-field` (≈48px — it includes the dynamic subscript space) |
+| `subscriptSizing="dynamic"` applied | `document.querySelectorAll('.mat-mdc-form-field-subscript-dynamic-size').length` | `classList.contains(...)` on `.mat-mdc-form-field` — the class sits on a different element, so this reports a **false negative** |
+| Loading indicator placement | `bar.closest('.table-section')` is non-null while data is loading (intercept/delay the request to catch the state) | a screenshot taken after load, which shows nothing |
+| Select panel surface | compare `getComputedStyle(panel).backgroundColor` against the card behind it | eyeballing a dark screenshot |
 
 ### How to Verify
 
-Use the `browser-use` subagent to:
+Use the browser MCP / `playwright-cli` to:
 
 1. Navigate to the affected page/route (e.g. `http://localhost:4200/my-feature`)
 2. Take a screenshot and inspect the rendered output against this design system
 3. If the page has dark mode: toggle to dark mode and take another screenshot
 4. If the component is a dialog: trigger the dialog open and screenshot the modal
-5. Report any visual discrepancies found and fix them before completing the task
+5. **Measure, don't just look**: read the computed values for the numeric rules (see the recipes above) — spacing and density regressions are frequently invisible in a screenshot
+6. Prefer a **CSS selector** over a role locator when clicking design-system elements (`click '.filter-toggle-btn'`). A role locator like `getByRole('button', { name: 'Filtros' })` can resolve to a different element and make a working component look broken
+7. To verify a transient state (loading, empty), intercept and delay the request rather than trying to catch it by timing
+8. Report any visual discrepancies found and fix them before completing the task
 
 ### Exceptions
 
