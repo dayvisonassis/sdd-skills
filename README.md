@@ -28,7 +28,8 @@ sdd-skills/
 │   ├── integration-test-writer/     # PABX: apps/backend/__tests__/integration (supertest + DB)
 │   ├── integration-test-validator/  # PABX: audits the above
 │   ├── monorepo-unit-test-writer/   # PABX: other apps/ (node-express/worker, python-fastapi)
-│   └── monorepo-unit-test-validator/# PABX: audits the above
+│   ├── monorepo-unit-test-validator/# PABX: audits the above
+│   └── pabx-design-system/          # PABX: pointer to the design-system doc (feeds the styles gate + visual check)
 └── docs/                        # base/reference docs + the workflow guide
 ```
 
