@@ -210,7 +210,29 @@ Buttons follow a strict color convention. Do NOT use `color="primary"` or `color
   --mdc-filled-button-container-height: 32px;
   --mdc-filled-button-label-text-size: 12px;
 }
+
+/* OBRIGATÓRIO junto de .btn-secondary — sem isto o botão fica ILEGÍVEL no hover
+   do tema claro. `src/_bootstrap-utilities.scss` é global e define
+   `.btn-secondary:hover { background-color: #5A6268 }`, que vence o Material no
+   hover (classe + pseudo). O gate `tails/complete-bootstrap-override` reprova
+   quem declarar .btn-secondary sem declarar o :hover. Mesmo vale para as outras
+   classes que aquele arquivo define com :hover: .btn, .btn-danger, .btn-dark,
+   .btn-default, .btn-info, .btn-success, .btn-warning, .btn-outline-danger,
+   .btn-outline-secondary, .close, .dropdown-item, .nav-link. */
+.btn-secondary:hover {
+  background-color: var(--mat-sys-surface-container-highest, #d6d9dd);
+  color: var(--mat-sys-on-surface, #1a1a1a);
+}
+
+:host-context(.theme-default-dark) .btn-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: var(--mat-sys-on-surface, #e0e0e0);
+}
 ```
+
+> **Cuidado com tokens que este app não define.** `--mat-sys-primary` resolve para **vazio** aqui —
+> usá-lo deixa o elemento com a cor herdada e um link fica indistinguível de texto. Para link, use a
+> classe global **`.link`** (`#007bff` no claro, `#64b5f6` no escuro).
 
 ```html
 <!-- CORRECT -->

@@ -14,6 +14,32 @@ O documento viaja junto com a skill: ao (re)instalar a skill num projeto/branch,
 `references/` é copiada junto, então a referência está sempre disponível — sem depender de
 nenhum arquivo externo (IDE, `.cursor`, etc.). **Leia e edite direto em `references/angular-material.md`.**
 
+## Três armadilhas desta base que já custaram retrabalho
+
+1. **Classe do design system que colide com o Bootstrap global.** `src/_bootstrap-utilities.scss` é
+   importado por `styles.scss` e define `.btn-secondary`, `.btn-danger`, `.btn`, `.close`,
+   `.dropdown-item`, `.nav-link` e outras **com `:hover`**. Sobrescrever uma delas sem declarar o
+   `:hover` deixa o hover nas mãos do Bootstrap — o botão fica **ilegível no tema claro**. O gate
+   `tails/complete-bootstrap-override` reprova. Ver o bloco `.btn-secondary` na referência.
+2. **`.btn-primary-green` / `.btn-secondary` / `.data-table` NÃO são globais** — cada componente
+   redeclara no próprio CSS. Sem isso o botão nasce preto e a tabela sem estilo.
+3. **`--mat-sys-primary` não existe neste app** (resolve para vazio). Para link, usar a classe
+   global `.link`.
+
+## Convenções de UX obrigatórias no módulo de tickets
+
+Aprendidas nas F05–F07 e válidas para toda feature nova do módulo (fonte canônica: a seção
+"Convenções de UX obrigatórias" em `docs/cadastro_ticket/prd_ticket_module.md`):
+
+- **Card de ajuda** (`help_outline` na linha do título → diálogo "Como … funciona") em todo
+  componente com regra não óbvia. Explicar o que o usuário não tem como adivinhar.
+- **Resolver a tarefa no próprio componente**: sugestões calculadas do contexto + busca local, em vez
+  de mandar o operador sair da tela e voltar com um identificador. Ação impossível aparece
+  **desabilitada com o motivo no tooltip**, não falha no clique.
+- **Consultar sem perder contexto**: referência a outra entidade é âncora `routerLink` (ganha
+  Ctrl+clique) e tem prévia em diálogo.
+- **Operação em lote reporta** o que fez e o que preservou, com o motivo de cada item.
+
 ## Quando usar
 
 - Ao **criar ou reformular qualquer componente/tela** do `apps/frontend`: leia
