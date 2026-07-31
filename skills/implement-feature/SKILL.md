@@ -198,7 +198,20 @@ For each acceptance criterion loaded in Step 2, locate the test(s) mapped to it 
 
 **6.4 — Environment smoke check (when applicable)**
 
-If the feature produces runtime surfaces that per-phase validation couldn't exercise (UI page, HTTP endpoint, migration, CLI command), do one final exercise of each against a local environment. Use the **Environment Contract** in `contract.md` to know what must be up. A quick load-and-interact is enough.
+If the feature produces runtime surfaces that per-phase validation couldn't exercise (UI page, HTTP endpoint, migration, CLI command), do one final exercise of each against a local environment. Use the **Environment Contract** in `contract.md` to know what must be up.
+
+**Loading a page is not exercising it.** For every interactive control the feature adds or touches, drive it and observe the result. Enumerate them and tick them off one by one — a screen that "opened and looked right" is not a smoke check:
+
+- **Every filter/search field, individually**, plus applying and clearing them.
+- **Every select, toggle, checkbox and date range** that changes what is fetched or displayed.
+- **Every action button**, including the ones meant to be disabled — confirm the reason is actually reachable (tooltip/message), not merely that the button is grey.
+- **Pagination**, whenever the list can exceed one page.
+
+**An empty result never validates a filter.** Filtering by a value that matches nothing returns zero rows whether the filter works or is silently ignored — the two outcomes are indistinguishable, so the check proves nothing. Exercise each filter with a value that **exists in the data** and confirm the set narrows to exactly it; only then, optionally, try a non-matching value. If the data has no qualifying value, create one, or record that filter as **not verified** under `Soft-fails` — never as verified.
+
+**Prefer evidence over impression.** Where the environment allows, confirm in the request log / network trace that the interaction issued the expected call with the expected parameters, and that one user action produced **one** request. Duplicate requests from a single action are a real defect this step is well placed to catch.
+
+Any control you did not drive goes under `Soft-fails` **by name**. Never report a smoke check as passed for a control you only saw rendered.
 
 If the environment cannot be brought up in this run, log each skipped smoke check under `Soft-fails`.
 
