@@ -23,6 +23,7 @@ sdd-skills/
 │   ├── implement-feature/       # implement, test, satisfy the contract gates, write progress.json
 │   ├── evaluator/               # evaluate against contract.md; owns the loop; routes fixes
 │   ├── fix-runner/              # minimal CODE corrector (dispatched by evaluator on FAIL)
+│   ├── playwright-cli/          # drive a real browser: smoke tests, visual checks, Playwright specs
 │   ├── unit-test-writer/            # PABX: Angular .spec.ts + Node apps/backend/__tests__/unit
 │   ├── unit-test-validator/         # PABX: audits the above
 │   ├── integration-test-writer/     # PABX: apps/backend/__tests__/integration (supertest + DB)
@@ -75,6 +76,15 @@ npx skills add <owner>/<repo> --skill spec-writer,implement-feature,evaluator,fi
 
 Add `-g` for a global (user-level) install where supported. The installer finds each
 `SKILL.md` under `skills/`.
+
+> ⚠️ **Prefer the per-project install over `-g`.** When the same skill exists both globally and
+> in the project, one copy silently wins — and if the global one is older, you get old
+> instructions with no warning. This happened for real: a global `implement-feature` six
+> kilobytes behind the canonical version ran for eight consecutive features, and because it
+> predated `contract.md` and `progress.json`, neither was ever honoured. Nothing failed loudly.
+> If you do install globally, re-sync on every update, and remember that comparing file sizes
+> is misleading on Windows: CRLF alone inflates a file by hundreds of bytes, so compare with
+> `diff --strip-trailing-cr` before concluding anything drifted.
 
 ### Option B — copy the folders (no Node.js required)
 
@@ -135,6 +145,13 @@ PER FEATURE (repeat):
 > **Test skills are PABX-specific.** The 6 `*-test-writer`/`*-test-validator` skills assume the
 > PABX monorepo layout (`apps/frontend`, `apps/backend`, `apps/*`). On a non-PABX project,
 > `implement-feature` falls back to writing tests itself. See the guide for details.
+
+> **`playwright-cli` serves the two steps that need a real browser:** `implement-feature`'s
+> environment smoke check (step 6.4 — drive every control, not just load the page) and the
+> `evaluator`'s screenshots for observable UI criteria. It is stack-agnostic and you can also
+> invoke it on its own. Note that the Playwright **MCP tools** may already be available to the
+> agent independently; this skill is the usage guide on top of them — session handling, request
+> mocking, storage state, spec-driven testing — not the driver itself.
 
 - **You invoke** every skill directly **except `fix-runner`** — the `evaluator` dispatches it
   automatically when an evaluation fails. Test failures are routed to the matching
