@@ -91,6 +91,7 @@ If none exists, **do not build this gate** (there is nothing to enforce against)
 
 - *Density*: a template that is a dialog (contains the dialog-content/actions markers) **and** has form fields → parse `styleUrls` from the sibling component file, resolve each path, and require that the **union** of those CSS files declares the density token (e.g. `--mat-form-field-container-height`). This catches a whole family of screens silently rendering the framework default instead of the specified height — a gap no single-file lint and no grep can see.
 - *Required composition*: a template with the page-shell + table + pagination markers must also contain the filter-sidebar component.
+- *Declared-but-untested controls*: when a screen declares its filters as data (a `filterConfig`-style array of field descriptors), each declared field **key** must appear somewhere in the sibling spec. This catches the field nobody ever wrote a test for. Be clear-eyed about its limit: a spec that merely mentions the key satisfies it, so this gate proves **coverage exists**, never that the control was driven end-to-end — that stays a headed-run obligation and belongs in the "What these gates do NOT check" section of `GATES.md`.
 
 Guidelines: derive the "is this file of kind X?" test from markers already in the template (no config to maintain); emit a message that names the file **and the fix**; keep it changed-files-scoped like the rest; and **validate fail→fix→pass** by deliberately breaking one file, confirming a non-zero exit, then restoring. Measure the blast radius on the existing codebase first — if most legacy files violate the rule, either narrow the "kind X" test (e.g. only *pages*, excluding tables embedded in dialogs/dashboards) or make it advisory.
 
@@ -161,6 +162,14 @@ For each selected gate, in `runGate` order:
 ### Step 8: Document & Report
 
 - Write `GATES.md`: the gate list with `id`s, the command for each, the `runGate` order, and the brownfield baseline note (if any). This is the human- and agent-readable contract of what gates exist — `spec-writer` reads the same tooling when it declares gates in `contract.md`.
+
+- `GATES.md` MUST also carry a **"What these gates do NOT check"** section. Gates are deterministic commands; a green run is routinely mistaken for "verified", and the gaps are invisible precisely because nothing reports them. This section is the only tracked place where those obligations live — skill folders like `.claude/skills/` are usually gitignored (see the shared-source warning in Phase 1) and an assistant's local memory does not reach the team at all. State at minimum:
+  - **Interactive behaviour.** No gate drives a filter, a select, a toggle or pagination. A listing screen whose gates are green may still ship a filter that is wired to nothing. Whoever validates must exercise **each control individually**, and **an empty result never validates a filter** — filtering by a value that matches nothing returns zero rows whether the filter works or is ignored, so it must be exercised with a value present in the data.
+  - **Measured visual conformance.** Colour, contrast, spacing and density rules that the linters express as advisories, or cannot express at all, are only proven by reading computed values in a browser — not by the presence of a class. Note that a global `!important` can silently defeat a component rule, so the documented value and the rendered value may differ.
+  - **Anything a rule marks as a warning rather than an error.** Name them, because "the gate passed" hides them. Flag the trap explicitly: silencing an advisory by swapping a value (e.g. a colour for a token) can regress the very property the advisory was pointing at, so any such swap must be re-measured.
+  - **Whatever the stack's gates provably cannot reach** (real credentials, external services, telephony/hardware, cross-browser).
+
+  Keep this section next to the gate list, not in an appendix, and keep it honest: it is the contract for what still needs a human or a headed run.
 - Output a final report:
 
 ```
