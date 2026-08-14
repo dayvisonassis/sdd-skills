@@ -20,17 +20,23 @@ flowchart TD
     SW --> IF["implement-feature<br/>→ código + testes (passa os gates)"]
     IF --> EV["evaluator<br/>→ avalia contra o contract.md"]
 
-    EV -->|CLEAN| NEXT["próxima feature ✅"]
+    EV -->|CLEAN| QP["qa-preflight<br/>→ portão antes do QA (você chama)"]
     EV -->|FAIL| FR["fix-runner<br/>→ corrige 1 problema"]
     FR --> EV
     EV -->|PENDING| HUM["intervenção humana 🙋"]
     EV -->|"N tentativas"| ABT["ABORTED ⛔"]
+
+    QP -->|"defeito objetivo"| FR
+    QP --> QA["QA humano<br/>só o que exige julgamento 🙋"]
+    QA --> NEXT["próxima feature ✅"]
 
     GB -.gates declarados em.-> SW
 
     style GB fill:#fff3e0,stroke:#e65100
     style EV fill:#fff3e0,stroke:#e65100
     style FR fill:#fff3e0,stroke:#e65100
+    style QP fill:#e3f2fd,stroke:#1565c0
+    style QA fill:#fff8e1,stroke:#f9a825
     style NEXT fill:#e8f5e9,stroke:#2e7d32
     style ABT fill:#ffebee,stroke:#c62828
     style HUM fill:#fff8e1,stroke:#f9a825
@@ -55,11 +61,14 @@ flowchart TD
 | **spec-writer** | Para cada feature, após o PRD | PRD + feature(s) | `spec.md` + `plan.md` + `contract.md` | — |
 | **implement-feature** | Após a spec da feature | spec + plan + contract | código + testes + commits + `progress.json` | — |
 | **evaluator** | Após implementar a feature | contract.md + progress.json + feature | report + estado + screenshots | **fix-runner** (código) / **test-writer** (teste) |
-| **fix-runner** | **Só o evaluator chama** | `evaluation-report.json` (código) | correção de código + commit | **evaluator** (reavaliação) |
+| **fix-runner** | **Você não chama** — só o `evaluator` ou o `qa-preflight` | `evaluation-report.json` (código) | correção de código + commit | quem o chamou (reavaliação) |
+| **qa-preflight** | Feature **pronta**, antes de entregar ao QA | feature + spec/contract + tela no ar | plano de QA (`.md` + `.csv`) + relatório de achados | **fix-runner** (código) / **test-writer** (teste) |
 | **unit/integration/monorepo-unit-test-writer** | Escrita/correção de testes (PABX) | `target_file` (ou `evaluation-report.json` no fix) | testes escritos/corrigidos | — |
 | **unit/integration/monorepo-unit-test-validator** | Auditar testes (PABX) | `test_file_path` | relatório de conformidade (PASS/FAIL) | — |
 
-> 🔑 Você invoca diretamente as skills do fluxo, **exceto `fix-runner`** (só o evaluator chama).
+> 🔑 Você invoca diretamente as skills do fluxo, **exceto `fix-runner`** (só o `evaluator` e o
+> `qa-preflight` o chamam). O **`qa-preflight` é sempre invocado por você**, nunca por outra
+> skill — ele roda quando a feature está pronta, não durante a implementação.
 > As **test-writers/validators** você pode chamar direto (modo interativo, com aprovação) **ou**
 > elas são chamadas automaticamente pelo `implement-feature` (escrita) e pelo `evaluator`
 > (correção de teste, modo autônomo).
@@ -248,6 +257,34 @@ sequenceDiagram
 
 ---
 
+### Passo 2F — Portão antes do QA: `qa-preflight`
+
+Com a feature **CLEAN**, antes de entregar a um QA humano. **Você chama** — nenhuma outra
+skill invoca esta.
+
+```
+qa-preflight F01
+```
+
+O que ela faz, em quatro fases:
+
+1. **Investiga** — confere o ambiente (app no ar, login automatizado, dados no tenant da
+   conta), lê spec/contract/rotas/permissões e **abre a tela**, exercitando cada controle,
+   cada filtro com valor que retorna resultado, os estados vazio e de erro, nos dois temas.
+2. **Para no checkpoint** — apresenta o inventário e os achados divididos em "vou corrigir" e
+   "vai para o QA". **Nenhuma correção acontece antes da sua aprovação**, nem as mecânicas.
+3. **Corrige por despacho** — manda cada achado aprovado para o `fix-runner` (código) ou para
+   o test-writer da vez (cobertura), e **re-executa** o que foi corrigido.
+4. **Entrega** — `docs/qa/QA-<FEATURE>.md` + `.csv` (o plano que o QA executa) e
+   `docs/qa/ACHADOS-<FEATURE>.md` (o que foi corrigido, o que foi escalado, e a guarda
+   permanente proposta para cada achado).
+
+**O que ela nunca faz:** editar código de produção diretamente, pular o checkpoint, contornar
+proteção anti-bot para conseguir logar, ou marcar como verificado um caso que não conseguiu
+executar — "não havia o que medir" é resultado inconclusivo, e vai para o QA como tal.
+
+---
+
 ## Receitas prontas
 
 ### Projeto novo (greenfield), do zero
@@ -258,7 +295,8 @@ sequenceDiagram
 3. spec-writer  F01         → spec + plan + contract
 4. implement-feature  F01   → código + testes + commits
 5. evaluator  F01              → CLEAN? segue. FAIL? ele corrige sozinho (fix-runner)
-6. repita 3→5 para F02, F03…
+6. qa-preflight  F01           → antes de entregar ao QA humano (opcional, mas é o portão)
+7. repita 3→6 para F02, F03…
 ```
 > Em greenfield você pode rodar o `gate-builder` logo após a primeira feature de fundação, se
 > preferir ter código mínimo para os gates verificarem. Mas tê-los cedo evita acúmulo de
@@ -274,7 +312,8 @@ sequenceDiagram
 5. spec-writer  F01         → spec + plan + contract
 6. implement-feature  F01   → código + testes
 7. evaluator  F01              → avalia (com correção automática)
-8. repita 5→7 por feature
+8. qa-preflight  F01           → antes de entregar ao QA humano (opcional, mas é o portão)
+9. repita 5→8 por feature
 ```
 
 ### Várias features de uma onda em paralelo
@@ -305,12 +344,17 @@ flowchart TD
         ARp["architecture-analysis-*.md"]
         DRp["deep-analysis-*.md"]
     end
+    subgraph qa ["docs/qa/ (por feature, do qa-preflight)"]
+        QAP["QA-FEATURE.md + .csv<br/>(o plano que o QA executa)"]
+        ACH["ACHADOS-FEATURE.md<br/>(corrigidos, escalados, guardas)"]
+    end
     subgraph proj ["raiz do projeto"]
         RG["scripts/runGate.mjs + GATES.md"]
     end
 
     style CT fill:#fff3e0,stroke:#e65100
     style PJ fill:#e3f2fd,stroke:#1565c0
+    style QAP fill:#e3f2fd,stroke:#1565c0
 ```
 
 - **`progress.json`** (raiz de `docs/`): o "placar" do fluxo — estado de cada feature
@@ -333,7 +377,8 @@ flowchart TD
 | spec-writer | ✅ sim (single ou batch) | não |
 | implement-feature | ✅ sim | ✅ chama uma **test-writer** (escrita, autônomo) |
 | evaluator | ✅ sim | ✅ **fix-runner** (código) / **test-writer**→**test-validator** (teste) |
-| **fix-runner** | ❌ **não** — só o evaluator | ✅ devolve ao **evaluator** |
+| **qa-preflight** | ✅ sim — **sempre você**, com a feature pronta | ✅ **fix-runner** (código) / **test-writer** (teste) |
+| **fix-runner** | ❌ **não** — só o evaluator ou o qa-preflight | ✅ devolve a quem o chamou |
 | test-writer (unit/integration/monorepo) | ✅ sim (interativo) ou via skill (autônomo) | não |
 | test-validator (unit/integration/monorepo) | ✅ sim ou via evaluator | não |
 

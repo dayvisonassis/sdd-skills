@@ -22,11 +22,11 @@ test-validator). If a report handed to `fix-runner` contains only `kind: test` f
 
 ## INPUT
 
-- **Target feature** (ID) and the **path to `evaluation-report.json`** (passed by the evaluator). The on-disk report is the source of truth.
+- **Target feature** (ID) and the **path to `evaluation-report.json`** — passed by the **`evaluator`** (on FAIL) or by **`qa-preflight`** (after the feature is done). Both write the same schema, and the on-disk report is the source of truth either way.
 - If no report path is given, auto-discover the feature's `evaluation-report.json` in `docs/<feature-id>-<kebab>/` and `lastEvaluationReport` in `progress.json`.
 - Auto-discovers: the feature's `contract.md` and `progress.json`. Reads `spec.md`/`plan.md` lazily, only for the context the fix needs.
 
-If no error report can be found, abort: "fix-runner requires an evaluation-report from the evaluator."
+If no error report can be found, abort: "fix-runner requires an evaluation-report from the evaluator or from qa-preflight."
 
 ## OUTPUT
 
@@ -80,7 +80,7 @@ If no error report can be found, abort: "fix-runner requires an evaluation-repor
 ## RULES
 
 **Always:**
-- Act only from an evaluation-report produced by the evaluator.
+- Act only from an evaluation-report — produced by the `evaluator` or by `qa-preflight`.
 - Re-read the violated criterion/gate (`ref`) in `contract.md` before fixing, so the fix conforms.
 - Fix only the reported cause, with the smallest possible footprint.
 - Locally revalidate the failing gate/test before returning.
@@ -102,6 +102,8 @@ If no error report can be found, abort: "fix-runner requires an evaluation-repor
 **No evaluation-report found**: abort — the fix-runner needs the evaluator's report to act.
 
 **Report references a `ref` not found in contract.md**: fix from the report's `message`/`location`/`evidence`, and note the missing contract reference in the return signal so the evaluator/spec-writer can reconcile.
+
+**`kind: qa-finding`**: this is the expected shape, not an anomaly — the finding is a real defect that no contract criterion covered, and its `ref` is the QA case id that found it (e.g. `CT-ACESSIBILIDADE-002`). Fix from `message`/`location`/`evidence` and do **not** report a missing contract reference. Everything else is unchanged: minimal footprint, local revalidation, one commit.
 
 **Fix can't be made within scope** (the real cause is outside the reported failure, or requires a spec/contract change): do not stretch scope. Return "not resolved — <reason>" without committing, so the evaluator can decide (re-evaluate, PENDING, or eventually ABORTED).
 
