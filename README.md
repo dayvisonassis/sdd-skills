@@ -22,7 +22,8 @@ sdd-skills/
 │   ├── spec-writer/             # per feature: spec.md + plan.md + contract.md
 │   ├── implement-feature/       # implement, test, satisfy the contract gates, write progress.json
 │   ├── evaluator/               # evaluate against contract.md; owns the loop; routes fixes
-│   ├── fix-runner/              # minimal CODE corrector (dispatched by evaluator on FAIL)
+│   ├── fix-runner/              # minimal CODE corrector (dispatched by evaluator or qa-preflight)
+│   ├── qa-preflight/            # feature done: fixes what is objective, hands the QA what needs judgement
 │   ├── playwright-cli/          # drive a real browser: smoke tests, visual checks, Playwright specs
 │   ├── unit-test-writer/            # PABX: Angular .spec.ts + Node apps/backend/__tests__/unit
 │   ├── unit-test-validator/         # PABX: audits the above
