@@ -1,6 +1,6 @@
 ---
 name: fix-runner
-description: Specialized, lightweight corrector dispatched by the evaluator on FAIL. Reads the structured evaluation-report.json, applies the minimal fix for the reported problem, locally revalidates the failing gate/test, commits (one commit per correction), records the attempt in progress.json, and returns control to the evaluator for re-confirmation. Does not implement new features, does not orchestrate the attempt loop, and does not decide ABORTED.
+description: Specialized, lightweight corrector dispatched by the evaluator on FAIL, or by qa-preflight after a feature is done. Reads the structured evaluation-report.json (both producers write the same schema), applies the minimal fix for the reported problem, locally revalidates the failing gate/test, commits (one commit per correction), records the attempt in progress.json, and returns control to whoever dispatched it. Does not implement new features, does not orchestrate the attempt loop, and does not decide ABORTED. Never invoked directly by a human.
 ---
 
 # Fix Runner
