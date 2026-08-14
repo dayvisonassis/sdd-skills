@@ -231,6 +231,38 @@ plano se mostrar irregular na prática, o validator vira uma skill à parte — 
 
 ---
 
+## Validação — execução de aceitação (2026-08-14)
+
+Rodada contra a **F08 (Incidentes)** do PABX, com o critério fechado antes: encontrar **sem ser
+avisada** dois defeitos que o gate visual mediu na véspera.
+
+**Resultado: encontrou os dois — e refutou um deles.**
+
+| Achado | Classificação | Desfecho |
+|---|---|---|
+| Badge "Ativo" a **4.15:1** no tema claro (piso 4.5) | corrigir | Corrigido e re-medido: **5.86:1**. O escuro nunca esteve afetado (6.97:1) |
+| Campos do diálogo "a 33px" | **refutado** | Não existe. Era medição durante a animação de entrada; assentado, o campo mede **38px** exatos |
+| Selects de áudio a **40px** contra 38 declarados | escalar | 2px, o token está aplicado; decisão de design system |
+| Gate visual media antes da animação assentar | corrigir | Espera por estabilização de valor, agnóstica a animação |
+
+O caso do "33px" é o argumento mais forte a favor do **checkpoint obrigatório**: com autonomia
+para corrigir, a skill teria "consertado" uma altura que já estava certa. O sinal que denunciou
+foi o valor **variar entre temas** — altura não depende de tema.
+
+### Três lições que voltaram para a skill
+
+1. **`HTTP 200` de um dev server não prova que o bundle servido é o da árvore.** O `ng serve`
+   estava travado num erro de build havia horas, servindo bundle velho, e o preflight passou.
+   O check precisa comparar o servido com o working tree, não só bater na porta.
+2. **Login por teste esbarra em rate limit.** Treze casos × três execuções produziram
+   **HTTP 429** e três falhas que pareciam defeito de produto. A sessão tem de ser obtida uma
+   vez e reusada — reusar login legítimo **não** é forjar sessão, e a distinção precisa estar
+   escrita para não colidir com a regra anti-bot.
+3. **Falso positivo custa mais que falso negativo.** Um gate que acusa defeito inexistente é
+   desligado pelo time; um que deixa passar apenas não é consultado.
+
+---
+
 ## Checklist final — "minha skill `qa-preflight` está pronta?"
 
 - [ ] O `SKILL.md` cabe em algumas centenas de linhas e os detalhes longos estão em `references/`?
