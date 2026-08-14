@@ -93,6 +93,22 @@ is where the `Verificado por` column comes from.
 
 ### 1.3 Execute
 
+**Always drive the browser headed — `playwright-cli open --headed`.** The default is headless;
+passing the flag is not optional here.
+
+This is not a preference about watching a robot work. The human running this skill watches the
+session live, and **what they catch is what the skill did not**: a misaligned element, copy
+that reads wrong, a transition that stutters, a control nobody thought to enumerate. A hidden
+screen turns that person into a reader of reports; a visible one makes them a second pair of
+eyes on the product itself. Every gap they spot is a gap in **this file**, and the way the
+skill gets better (see 2.1).
+
+A headed run is also why **dark theme comes first** — someone is looking at the screen, and the
+light pass is kept as short as possible.
+
+> Do not confuse this with the visual gate, which runs **headless on purpose**: the gate is an
+> unattended check in a pipeline, this is an attended investigation.
+
 Drive the real screen with the `playwright-cli` skill:
 
 - **every control**, one at a time — a screen that loads is not a screen that works;
@@ -133,6 +149,21 @@ goes to the QA. Then stop.
 If this skill is ever dispatched non-interactively, it **does not skip the checkpoint**: it
 stops and reports that it needs one. Editing already-validated code with nobody looking is
 the failure mode this phase exists to prevent.
+
+### 2.1 Ask what the screen showed that the report did not
+
+Before presenting the lists, ask the person who watched the headed run one question:
+
+> **"What did you see that I did not report?"**
+
+Anything they name is treated like any other finding — classified, fixed or escalated. But it
+carries one extra obligation: **a finding that came from the human and not from the run is a
+gap in this skill.** Record it in the findings report under *Guardas permanentes propostas*
+with what the derivation would have needed to catch it — a new check in the accessibility
+axis, a control the enumeration skipped, a state nobody modelled.
+
+This is the loop that makes the skill improve instead of ossify. It only exists because the
+run is watched, which is why 1.3 is headed and not negotiable.
 
 ---
 
@@ -220,6 +251,8 @@ existed — had never executed once. When it finally ran, it found a badge at 4.
 - Run the environment preflight first, and name the failing check.
 - Stop at the checkpoint and wait for approval before any correction.
 - Dispatch the existing correctors; re-execute what they corrected.
+- Drive the browser **headed**, so the person running this can see what you see.
+- Ask, at the checkpoint, what the watcher saw that the run did not report.
 - Log in once and reuse the session across every case.
 - Confirm the dev server's last build succeeded before trusting a measurement.
 - Let a measured value settle before asserting on it.
@@ -233,6 +266,7 @@ existed — had never executed once. When it finally ran, it found a badge at 4.
 - Seed a session, forge a token, or bypass an anti-bot protection.
 - Mark an unexecuted case as verified, or fill `Resultado Obtido` for one.
 - Report a rate-limit or stale-bundle artefact as a product defect.
+- Run the investigation headless — that is the visual gate's job, not this one's.
 - Write an assertion into a visual suite that is **not enabled** — deliver it ready in the
   findings report instead.
 - Touch files outside the feature under validation.
