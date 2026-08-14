@@ -19,6 +19,12 @@ that is still moving.
 **It owns no correction logic.** Defects are fixed by dispatching the correctors that already
 exist, with the discipline they already have.
 
+**One carve-out, and only one: the permanent guard.** No test-writer covers a browser-level
+assertion suite, so when the visual gate is enabled the skill writes that assertion itself.
+This is guard code, not product behaviour — it changes what is *checked*, never what the
+application *does*. Production code stays off-limits under every circumstance, and the guard
+still goes through the checkpoint like any other change.
+
 ## INPUT
 
 - **Target feature** (ID, e.g. `F08`).
@@ -49,10 +55,17 @@ dies in timeouts teaches nothing about the product.
 | Check | On failure, say |
 |---|---|
 | Frontend answers on the base URL | "the app is not answering at `<url>` — bring the stack up" |
+| **The served bundle is current** | "the dev server is serving a stale bundle — its last build failed: `<error>`" |
 | Backend answers | "the API is not answering at `<url>` — the screen will render empty" |
 | Browser runner installed | "`@playwright/test` is declared but not installed — run the install at the repo root" |
 | Automated login works | see below |
 | The account's tenant has data for this feature | "the account `<login>` sees no data for this feature — seed it, or nothing can be measured" |
+
+**`HTTP 200` does not mean the code under test is the code on disk.** A dev server whose
+last build failed keeps serving the previous bundle, happily and indefinitely. Read the dev
+server's log for a build error before trusting anything measured afterwards — in a real run,
+`ng serve` had been stuck on leftover merge-conflict markers for hours, the preflight passed
+it, and a CSS fix appeared not to work because the browser was three hours behind the tree.
 
 **On login, and this is not negotiable:**
 
@@ -61,6 +74,16 @@ dies in timeouts teaches nothing about the product.
 > disables verification outside production). If it does, use it and say so in the plan's
 > prerequisites. If it does not, **stop and report** — an environment that cannot be driven
 > is a finding for the team, not an obstacle to work around.
+
+**Log in once and reuse the session.** Save the authenticated storage state after the first
+login and reuse it for every case. Logging in per case throws dozens of attempts at the auth
+endpoint and trips the rate limiter: a real run produced **HTTP 429** midway, and three cases
+failed in a way that looked exactly like a product defect. When a 429 appears, say so — it is
+an artefact of how the run was driven, not a finding about the feature.
+
+> Reusing a session you obtained legitimately is **not** forging one. The rule above forbids
+> manufacturing access the application did not grant; it does not require throwing away access
+> it did.
 
 ### 1.2 Read
 
@@ -80,6 +103,17 @@ Drive the real screen with the `playwright-cli` skill:
 
 Record for each case whether it was executed and what was observed. **Anything not
 exercised is inconclusive** — never recorded as working.
+
+**Measure only after the value settles.** An element that is still animating reports a
+smaller box: poll the measurement until it repeats, then assert. Waiting on the element's own
+animations is not enough — a dialog's scale usually lives on an overlay above it, so its
+subtree reports nothing to wait for. Polling the value is animation-agnostic and measures the
+thing you care about rather than a proxy for it.
+
+**A value that changes with something it cannot depend on is a measurement bug, not a
+defect.** A height that differs between colour themes is the clearest example. Re-measure
+before classifying: a real run reported a 33px field that did not exist, and the settled
+value was exactly the 38px the design system specifies.
 
 ### 1.4 Classify
 
@@ -186,15 +220,19 @@ existed — had never executed once. When it finally ran, it found a badge at 4.
 - Run the environment preflight first, and name the failing check.
 - Stop at the checkpoint and wait for approval before any correction.
 - Dispatch the existing correctors; re-execute what they corrected.
+- Log in once and reuse the session across every case.
+- Confirm the dev server's last build succeeded before trusting a measurement.
+- Let a measured value settle before asserting on it.
 - Leave `Status` empty — the verdict is the QA's.
 - Record provenance in `Verificado por` for **every** case.
 - Write the blocking reason whenever a case cannot be executed.
 
 **Never:**
-- Edit production code directly.
+- Edit production code directly — the only code this skill writes is the permanent guard.
 - Skip the checkpoint, even when dispatched non-interactively.
 - Seed a session, forge a token, or bypass an anti-bot protection.
 - Mark an unexecuted case as verified, or fill `Resultado Obtido` for one.
+- Report a rate-limit or stale-bundle artefact as a product defect.
 - Write an assertion into a visual suite that is **not enabled** — deliver it ready in the
   findings report instead.
 - Touch files outside the feature under validation.
