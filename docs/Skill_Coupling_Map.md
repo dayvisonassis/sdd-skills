@@ -119,10 +119,23 @@ Por isso a prioridade segue `Ca*`.
 - **`Ca*` = beneficio** de refatorar — quanto risco sistemico se elimina
 - **`Ce*` = dificuldade** de refatorar — quanto pode quebrar o trabalho enquanto se mexe
 
-A fila portanto ordena por `Ca*` decrescente e desempata por **`Ce*` crescente**: maior retorno
-com menor chance de abrir uma frente que nao se consegue fechar. Um arquivo de `Ca*` alto e
-`Ce*` alto continua sendo o alvo mais importante, mas entra na fila sinalizado como empreitada,
-nao como ajuste.
+A fila portanto ordena, **dentro dos arquivos detectados**, por `Ca*` decrescente com desempate
+por **`Ce*` crescente**: maior retorno com menor chance de abrir uma frente que nao se consegue
+fechar. Um arquivo de `Ca*` alto e `Ce*` alto continua sendo o alvo mais importante, mas entra na
+fila sinalizado como empreitada, nao como ajuste.
+
+> **"Dentro dos detectados" nao e detalhe — a primeira versao desta frase o omitia e a
+> consequencia atravessou o projeto inteiro ate a tela.** Ordenar por `Ca*` sobre *tudo* poe no
+> topo `environment.ts` (`Ca*` 425, 11 linhas), `toast.model.ts` e `session-modal.service.ts` —
+> exatamente os arquivos que a propria barra lateral rotula "fundacao saudavel: nao tocar". Os 12
+> da zona de dor ficavam abaixo deles. Quem abrisse o relatorio e lesse a tabela de cima para
+> baixo receberia a fundacao do sistema como fila de refatoracao, que e o erro que este desenho
+> inteiro existe para evitar.
+>
+> O grafico ja os separava, pelo eixo LOC. A tabela nao, porque tinha uma chave so. A ordenacao
+> padrao e portanto **em camadas**: detectados primeiro (`pain`, depois `amplifier`, depois
+> `leafAsDependency`), e so entao a regra acima. Clicar num cabecalho continua sobrescrevendo com
+> aquela coluna unica.
 
 `Ce` **direto** nao e um criterio de risco: ele e o sinal de responsabilidade do criterio 1 da
 secao 1. Uma classe que precisa de 45 colaboradores para funcionar quase certamente faz varias
@@ -313,9 +326,15 @@ refatorar a fundacao do sistema.
 Herdada do prototipo de referencia fornecido pelo usuario, com os eixos trocados:
 
 - **Toggle Por arquivo / Por dominio.** Padrao: por dominio.
-- **Ordenacao padrao da tabela = a fila de refatoracao:** `Ca*` decrescente, desempate por
-  `Ce*` crescente (secao 4.2). A coluna `Ce*` mostra junto um rotulo de dificuldade, para que
-  um alvo caro nao seja confundido com um ajuste rapido.
+- **Ordenacao padrao da tabela = a fila de refatoracao:** detectados primeiro (`pain`,
+  `amplifier`, `leafAsDependency`), e dentro de cada camada `Ca*` decrescente com desempate por
+  `Ce*` crescente, e por caminho para ser total e estavel (secao 4.2). A coluna `Ce*` mostra
+  junto um rotulo de dificuldade, para que um alvo caro nao seja confundido com um ajuste
+  rapido. Sem a camada de detectados, a tabela abre listando as fundacoes saudaveis do sistema.
+- **As linhas por dominio carregam a uniao dos detectores dos seus arquivos.** Sem isso a visao
+  que o relatorio abre — a de dominio — pintava os 196 pontos de azul, com a legenda ao lado
+  prometendo vermelho, e a fila de refatoracao ficava invisivel na unica tela que o leitor ve
+  primeiro.
 - **Select Top 10 / 20 / 30 / 50 / Todos.** Padrao: **Top 20**. O Top N segue a **coluna de
   ordenacao ativa da tabela** — clicar em `Ca*` mostra os N maiores em raio de explosao,
   clicar em `LOC` mostra os N maiores em tamanho. Nenhum criterio de ranking novo e inventado.
