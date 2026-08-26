@@ -21,6 +21,7 @@ Two rules govern every field below.
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `minCoveragePct` | number | no (default `85`) | Coverage floor. Below it the run **aborts** and writes nothing. See "The coverage floor" below. |
+| `maxCoveragePct` | number | no (default `130`) | Coverage ceiling. Above it the run **aborts** too. More edges than declared imports means the denominator is blind to a form the project uses — nearly always a missing `importPrefixes`. |
 | `apps` | array of app objects | yes | One entry per independently resolved source tree. Each one is a separate `madge` invocation. |
 | `leafLayers` | array of strings | yes | Layer names that are supposed to be *called*, never *imported*. Feeds the `leafAsDependency` detector. |
 | `cuts` | object | yes | The six calibrated thresholds. |
@@ -34,6 +35,7 @@ Two rules govern every field below.
 | `extensions` | array of strings | yes | Without the dot: `["ts"]`, `["js"]`. Files outside this list are invisible to the graph — an app with `.tsx` files and `["ts"]` here silently loses them. |
 | `exclude` | array of strings | yes | Regex **sources**, as strings. `madge` runs them through `new RegExp(...)`, so a string keeps the file JSON-serialisable, and a backslash has to be escaped for JSON: `"\\.spec\\.ts$"`. Matched against the path **relative to `root`**, which is why `"/docs/"` catches `../docs/swagger.json` but not `docs/index.js` directly under `root`. |
 | `tsConfig` | string | no | Repo-relative path to a `tsconfig.json`. Read with the TypeScript compiler API so that non-relative imports resolved through `baseUrl`/`paths` become edges. **Omitting it on a TypeScript app is the single most damaging mistake possible here** — see below. |
+| `importPrefixes` | array of strings | no (default `[]`) | The non-relative prefixes this app resolves internally, taken from `baseUrl`/`paths`: `["app/", "@app/", "~/"]`. Relative forms are always counted and never listed. Feeds the coverage denominator only — the graph itself comes from `madge`. **Getting this wrong does not fail loudly on its own**, which is why the ceiling exists. |
 | `domainFrom` | `"firstFolderUnder"` \| `"basename"` | yes | How the domain name is derived. |
 | `domainBase` | string | with `firstFolderUnder` | The folder whose immediate child names the domain. |
 | `layerFrom` | `"suffix"` \| `"folder"` | yes | How the layer is derived. |
@@ -88,6 +90,20 @@ On the frontend the domain comes from the folder, so a file with no layer suffix
 domain. The flag would only throw information away there.
 
 ---
+
+### `importPrefixes` — the denominator has to know the project's aliases
+
+Coverage is resolved edges over declared imports, and the counter finds a declared import by the
+shape of its specifier: `'./x'`, `'../x'`, or a prefix this field lists. `madge` resolves
+`baseUrl` and `paths` aliases into real edges regardless, so an app that uses them and does not
+declare them here produces **more edges than declared imports**.
+
+Measured on this monorepo: removing `importPrefixes` from the frontend moves its coverage from
+100.0% to **176.5%**. Nothing about that number is subtle, and yet a guard with only a floor
+would let it through — which is exactly why `maxCoveragePct` was added. Read the two together:
+
+- **below the floor** — the graph is missing edges. Usually `tsConfig`.
+- **above the ceiling** — the denominator is missing imports. Usually `importPrefixes`.
 
 ## The coverage floor
 

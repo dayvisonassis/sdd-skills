@@ -1,15 +1,23 @@
-const INTERNAL = "['\"](\\.{1,2}/|app/|src/|environments/|shared/|core/)[^'\"]*['\"]"
+const RELATIVE = '\\.{1,2}/'
 
-const FROM = new RegExp('\\bfrom\\s+' + INTERNAL, 'g')
-const BARE = new RegExp('\\bimport\\s+' + INTERNAL, 'g')
-const DYNAMIC = new RegExp('\\bimport\\(\\s*' + INTERNAL + '\\s*\\)', 'g')
-const REQUIRED = new RegExp('\\brequire\\(\\s*' + INTERNAL + '\\s*\\)', 'g')
+function escapeForRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
-export function countDeclared(text) {
-  return (
-    (text.match(FROM) || []).length +
-    (text.match(BARE) || []).length +
-    (text.match(DYNAMIC) || []).length +
-    (text.match(REQUIRED) || []).length
-  )
+function internal(prefixes) {
+  const alternatives = [RELATIVE].concat((prefixes || []).map(escapeForRegExp))
+  return "['\"](" + alternatives.join('|') + ")[^'\"]*['\"]"
+}
+
+export function countDeclared(text, prefixes) {
+  const source = internal(prefixes)
+  const patterns = [
+    new RegExp('\\bfrom\\s+' + source, 'g'),
+    new RegExp('\\bimport\\s+' + source, 'g'),
+    new RegExp('\\bimport\\(\\s*' + source + '\\s*\\)', 'g'),
+    new RegExp('\\brequire\\(\\s*' + source + '\\s*\\)', 'g'),
+  ]
+  let total = 0
+  for (const pattern of patterns) total += (text.match(pattern) || []).length
+  return total
 }

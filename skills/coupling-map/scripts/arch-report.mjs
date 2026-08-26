@@ -35,28 +35,36 @@ const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const { adj, loc, taxonomy, stats } = await collect(config, repoRoot)
 
 const floor = config.minCoveragePct ?? 85
-const below = [
+const ceiling = config.maxCoveragePct ?? 130
+const scopes = [
   { name: 'total', edges: stats.edges, declared: stats.declared, coveragePct: stats.coveragePct },
   ...stats.apps,
-].filter(scope => scope.coveragePct < floor)
+]
+const below = scopes.filter(scope => scope.coveragePct < floor)
+const above = scopes.filter(scope => scope.coveragePct > ceiling)
+
+function announce(scope, verb, limit, unit) {
+  console.error(
+    'Coverage ' + scope.name + ': ' + scope.edges + ' resolved edges against ' +
+      scope.declared + ' declared imports (' + scope.coveragePct.toFixed(1) +
+      '%), ' + verb + ' the ' + limit + '% ' + unit + '.'
+  )
+}
 
 if (below.length > 0) {
-  for (const scope of below) {
-    console.error(
-      'Coverage ' +
-        scope.name +
-        ': ' +
-        scope.edges +
-        ' resolved edges against ' +
-        scope.declared +
-        ' declared imports (' +
-        scope.coveragePct.toFixed(1) +
-        '%), below the ' +
-        floor +
-        '% floor.'
-    )
-  }
+  for (const scope of below) announce(scope, 'below', floor, 'floor')
   console.error('Every metric below this line would be understated. Check tsConfig and extensions.')
+  process.exit(1)
+}
+
+if (above.length > 0) {
+  for (const scope of above) announce(scope, 'above', ceiling, 'ceiling')
+  console.error(
+    'More edges resolved than imports counted, so the denominator is missing forms it should see.'
+  )
+  console.error(
+    'Almost always importPrefixes: the project resolves non-relative imports this config never declared.'
+  )
   process.exit(1)
 }
 

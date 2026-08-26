@@ -54,7 +54,7 @@ export async function collect(config, repoRoot) {
         appUnreadable += 1
       } else {
         loc[path] = text.split('\n').length
-        appDeclared += countDeclared(text)
+        appDeclared += countDeclared(text, app.importPrefixes)
       }
     }
 
