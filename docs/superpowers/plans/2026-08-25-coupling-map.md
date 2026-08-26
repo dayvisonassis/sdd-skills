@@ -445,7 +445,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/taxonomy.test.mjs"
 ```
 
-Expected: `# pass 7`, `# fail 0`.
+Expected: `# pass 11`, `# fail 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -469,10 +469,38 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 3: Graph — strongly connected components and transitive counts
+### Task 3: Graph — strongly connected components and transitive counts — DONE, with one correction
 
 This is the task that carries the invariant test, and it is the one most likely to hide a bug:
 a naive transitive closure over a cyclic graph either double-counts or never terminates.
+
+> **Differential testing over 2257 random graphs confirmed the Tarjan is correct** — zero
+> disagreements against brute-force BFS, and the reverse-topological-order property that the
+> closure silently depends on was measured rather than assumed.
+>
+> **It also found that the invariant below was conditional, not universal.** `sum(caStar) ===
+> sum(ceStar)` broke on 181 of 181 *open* graphs — those where a node appears only as a target
+> and never as a key. `reverse` invented a key for such a target while `stronglyConnected`
+> skipped it, so the two disagreed about the node set. The test comment claimed it held "for any
+> graph", which was false.
+>
+> Fixed by making `stronglyConnected` treat an unknown target as its own singleton component, so
+> all three functions agree on the node set and the invariant is **unconditional**. This matters
+> beyond tidiness: the invariant is acceptance criterion 2 and is meant to run as a live check
+> against real output, which it cannot do if it depends on a precondition enforced two modules
+> away. Without the fix an unclosed graph yields `ce=2, ceStar=0` — arithmetically impossible,
+> and silent.
+>
+> The fix took two lines, not one: assigning the component id is not enough, because the counts
+> map was still keyed off `Object.keys(adj)` and the unknown target came back `undefined`. All
+> three functions have to span the same node set.
+>
+> **Mutation testing showed the two tests are not redundant.** Reverting only the counts loop
+> leaves the invariant test **green** — both sums still come to 3 on `{a:['b'],b:['c']}` while
+> `ceStar.get('b')` is `undefined`. Only the dedicated node-set test catches it. An invariant
+> over aggregates cannot see a hole that is symmetric in both directions; keep both tests.
+>
+> Final differential run: 2562 graphs, 486 of them open, zero failures.
 
 **Files:**
 - Create: `skills/coupling-map/scripts/coupling-map/graph.mjs`
@@ -702,7 +730,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/graph.test.mjs"
 ```
 
-Expected: `# pass 8`, `# fail 0`.
+Expected: `# pass 9`, `# fail 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1020,6 +1048,16 @@ test('an edge climbing the layer order is a violation, descending is not', () =>
   })
 })
 
+test('a file importing itself is a cycle even though its component is a singleton', () => {
+  // Tarjan puts a self-looping node in a component of one, so filtering on
+  // members.length > 1 alone would skip it. Task 3's differential run surfaced
+  // this; whether it counts as a cycle is this filter's decision, not Tarjan's.
+  const files = [row({ path: 'self.js' })]
+  const r = detect({ files, adj: { 'self.js': ['self.js'] }, config: CONFIG })
+  assert.equal(r.cycles.length, 1)
+  assert.deepEqual(r.cycles[0], ['self.js'])
+})
+
 test('cycles come from the components, orphans from having no edges at all', () => {
   const files = [row({ path: 'a.js' }), row({ path: 'b.js' }), row({ path: 'z.js' })]
   const r = detect({ files, adj: { 'a.js': ['b.js'], 'b.js': ['a.js'], 'z.js': [] }, config: CONFIG })
@@ -1102,7 +1140,7 @@ export function detect({ files, adj, config }) {
 
   const { members } = stronglyConnected(adj)
   const cycles = [...members.values()]
-    .filter(group => group.length > 1)
+    .filter(group => group.length > 1 || (adj[group[0]] || []).includes(group[0]))
     .map(group => group.slice().sort())
     .sort((a, b) => a[0].localeCompare(b[0]))
 
@@ -1138,7 +1176,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/detect.test.mjs"
 ```
 
-Expected: `# pass 8`, `# fail 0`. If the pain-zone test fails because the calibrated cuts from
+Expected: `# pass 9`, `# fail 0`. If the pain-zone test fails because the calibrated cuts from
 Task 1 moved, update `CONFIG` in the test to the calibrated values and re-run — the assertions
 about which file trips which detector must still hold.
 
@@ -1149,7 +1187,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 30 passing, 0 failing.
+Expected: 36 passing, 0 failing.
 
 - [ ] **Step 6: Commit**
 
@@ -1981,7 +2019,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 39 passing, 0 failing.
+Expected: 45 passing, 0 failing.
 
 - [ ] **Step 5: Verify in the browser, dark theme first**
 
@@ -2148,7 +2186,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 39 passing, 0 failing.
+Expected: 45 passing, 0 failing.
 
 - [ ] **Step 3: Confirm the target project is left clean**
 
