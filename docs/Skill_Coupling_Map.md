@@ -325,7 +325,24 @@ refatorar a fundacao do sistema.
 
 Herdada do prototipo de referencia fornecido pelo usuario, com os eixos trocados:
 
-- **Toggle Por arquivo / Por dominio.** Padrao: por dominio.
+- **Toggle Por arquivo / Por dominio.** Padrao: **por arquivo**.
+
+  > O padrao era por dominio, para tornar 959 pontos legiveis. O **Top 20 ja resolve isso**, e a
+  > pergunta que a ferramenta responde e sobre arquivos. Abrir na visao correta e acionavel vale
+  > mais do que abrir num panorama que precisa de ressalvas.
+
+- **O balde `(sem dominio)` nao e plotado como dominio.** Medido no relatorio real, ele era o
+  ponto **mais a direita, mais alto e maior** da visao de abertura, sozinho no topo do quadrante
+  da fila de refatoracao. Nao e um modulo: sao 28 arquivos de infraestrutura sem relacao entre si
+  (`database.js`, `ami.js`, `main.ts`, `polyfills.ts`, `environments/*`), com `LOC` **somado**
+  (2501) e `Ca*` **maximo** (425, herdado de um arquivo de 11 linhas). Nenhum arquivo dele tem as
+  duas coordenadas, e refatora-lo nao e uma acao que exista. Continua contado na barra lateral e
+  cada um dos 28 aparece individualmente na visao por arquivo — nada e escondido.
+
+- **A posicao de um dominio mistura dois arquivos.** `Ca*` e o maximo sobre os arquivos e `LOC` e
+  a soma: `auth` marca `Ca*` 405 vindo de um model de 71 linhas e `LOC` 2020 vindo de todo o
+  resto. E deliberado (somar `Ca*` ranquearia dominios por tamanho com rotulo de risco), mas e
+  invisivel para quem le. A barra lateral diz isso enquanto a visao de dominio esta ativa.
 - **Ordenacao padrao da tabela = a fila de refatoracao:** detectados primeiro (`pain`,
   `amplifier`, `leafAsDependency`), e dentro de cada camada `Ca*` decrescente com desempate por
   `Ce*` crescente, e por caminho para ser total e estavel (secao 4.2). A coluna `Ce*` mostra
