@@ -1257,7 +1257,46 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 6: Collector, CLI, and the `architecture.json` contract
+### Task 6: Collector, CLI, and the `architecture.json` contract — DONE, with three corrections
+
+> The code blocks below are what was written first. Against them, three things changed, and one
+> line of the plan turned out to be wrong about its own behaviour:
+>
+> 1. **`existsSync` guards the wrong failure.** It answers "is the path there", and the read that
+>    follows can still throw. Reproduced deliberately: a file `madge` lists but node cannot open
+>    (`icacls /deny` on Windows; a locked file does the same) escapes `readFileSync` as an
+>    unhandled `EPERM` and takes the whole run down with a stack trace. The plan's Step 1 promised
+>    a fallback and did not have one. Replaced by a `readSource` that returns `null` on any read
+>    failure — which also covers the non-existent case, so `existsSync` is gone — with the count
+>    surfaced as `totals.unreadable` so a degraded number is visible rather than silent.
+> 2. **The coverage floor is now checked per app as well as on the total.** One misconfigured
+>    small app is diluted inside a large healthy one — on this monorepo the backend is 20% of the
+>    declared imports, so it could lose most of its graph and still leave the aggregate near the
+>    floor. The aggregate also cannot say *which* app to fix. `totals.coverageByApp` carries the
+>    breakdown and the abort message names each failing scope. Verified: dropping `tsConfig` prints
+>    `total 68.2%` **and** `frontend 57.8%`, exits 1, and writes nothing.
+> 3. **The CLI states the invariant.** `Σ Ca*` and `Σ Ce*` are printed on every run with `OK` or
+>    `BROKEN`, so acceptance criterion 2 is a line of normal output instead of a separate script
+>    somebody has to remember to run. Domain and direction-violation counts were added to the
+>    printout for the same reason.
+>
+> `render.mjs` is a **throwaway stub** committed in `064b68c` purely so the CLI can be imported
+> before Task 7 exists. Task 7 replaces the whole file.
+>
+> **Verified end to end against the real repository:** 959 nodes, 196 domains, 3139 edges,
+> coverage 103.7% total / 102.3% frontend / 109.5% backend, pain 12, amplifier 1,
+> controller-as-dependency 3, orphans 24, cycles 2, direction violations 14, invariant
+> `Σ Ca* = Σ Ce* = 15987`, two runs byte-identical (same sha256, no date-like token anywhere in
+> the JSON), and acceptance criterion 5 passing in both directions. Path normalisation confirmed
+> on real data: no node path contains `..` or a backslash, and `apps/backend/database.js` is a
+> single node with `Ca` 85. Backend edges are 671, not the probe's 674: that table predates the
+> `\.json$` exclusion this same probe introduced, which is also why orphans are 24.
+>
+> Two observations that are not defects. The fill loop for targets missing from `adj` never fires
+> here — `madge` returned no edge target that was not also a key, in either app — so it is a guard,
+> not a code path this repository exercises. And `loc` counts `split('\n').length`, one more than
+> `wc -l` for a newline-terminated file (`authorization.middleware.js`: 1416 against 1415); the
+> probe used the same convention, the numbers match it, and the measure is comparative.
 
 The first task that touches `madge`, and the first that runs end to end against a real tree.
 
