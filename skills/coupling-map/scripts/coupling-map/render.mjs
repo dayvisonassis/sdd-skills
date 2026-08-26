@@ -72,7 +72,7 @@ const STYLE = `
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink);
   font: 14px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
-.wrap { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 16px; padding: 16px; }
+.wrap { display: grid; grid-template-columns: minmax(0,1fr) 390px; gap: 16px; padding: 16px; }
 @media (max-width: 900px) { .wrap { grid-template-columns: minmax(0,1fr); } }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
 .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
@@ -136,6 +136,19 @@ h3:first-child { margin-top: 0; }
   border-radius: 50%; margin-right: 6px; background: var(--accent); }
 .legend .is-pain::before { background: var(--pain); }
 .legend .is-flagged::before { background: var(--warn); }
+.legend .is-smell::before { background: var(--warn); box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink); }
+.lede { border-left: 2px solid var(--accent); padding-left: 10px; }
+.glossary { margin: 8px 0; }
+.glossary dt { font-weight: 600; color: var(--ink); margin-top: 8px; }
+.glossary dd { margin: 2px 0 0; color: var(--muted); }
+.matrix { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.matrix th { text-align: left; font-weight: 600; color: var(--muted); padding: 4px 6px;
+  border-bottom: 1px solid var(--line); white-space: normal; cursor: default; }
+.matrix td { padding: 4px 6px; border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums; color: var(--ink); }
+code { background: var(--bg); border-radius: 3px; padding: 0 3px; }
+.hint { color: var(--muted); font-size: 11px; }
+th[title] { cursor: help; }
 #card .picked { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px; word-break: break-all; }
 #card .links { color: var(--muted); font-size: 12px; word-break: break-all; }
@@ -177,25 +190,93 @@ export function renderHtml(report) {
   <div class="panel sidebar">
     <div id="card"></div>
     <h3>Como ler</h3>
-    <p>Eixo X: <b>Ca*</b>, quantos modulos quebram se este quebrar. Eixo Y: <b>LOC</b>.
-    Tamanho do ponto: <b>Ce</b>. Os dois eixos sao logaritmicos.</p>
-    <p>Canto superior direito e a fila de refatoracao. Canto inferior direito e fundacao
-    saudavel: muito dependida e pequena. Nao tocar.</p>
-    <p>Passe o mouse sobre um ponto para ver as ligacoes dele: linha cheia e o que ele
-    <b>usa</b>, linha tracejada e <b>quem depende dele</b>. Clique para fixar e escolher a
-    profundidade. Vizinho que o Top N escondeu volta esmaecido - o filtro nunca esconde uma
-    ligacao.</p>
-    <p class="note" id="domain-note" hidden>Um dominio toma o <b>maior Ca*</b> entre os seus
-    arquivos e a <b>soma</b> das linhas deles, entao a posicao dele no grafico pode vir de dois
-    arquivos diferentes. As coordenadas reais de um arquivo estao em <b>Por arquivo</b>.</p>
+    <p class="lede">Risco e <b>chance de errar</b> vezes <b>preco do erro</b>. O eixo vertical
+    e a chance; o horizontal e o preco.</p>
+
+    <dl class="glossary">
+      <dt>Eixo X &mdash; Ca*, raio de explosao</dt>
+      <dd>Quantos modulos param de funcionar se este quebrar, contando tambem os que dependem
+      dele <b>por tabela</b>, atraves de outros. Quanto mais a direita, mais caro sai qualquer
+      engano aqui.</dd>
+
+      <dt>Eixo Y &mdash; LOC, linhas de codigo</dt>
+      <dd>O tamanho do arquivo. Nao mede qualidade, mede <b>exposicao</b>: um arquivo de 1400
+      linhas guarda mais decisoes, mais casos especiais e mais cantos onde um efeito colateral
+      se esconde do que um de 40. Quanto mais acima, maior a chance de errar ao mexer.</dd>
+
+      <dt>Tamanho do ponto &mdash; Ce</dt>
+      <dd>De quantos modulos diferentes este arquivo precisa para funcionar. Se qualquer um
+      deles quebrar, ele quebra junto. Ponto grande e arquivo que precisa conhecer muita coisa
+      &mdash; e conhecer muita coisa quase sempre significa <b>fazer mais de uma coisa</b>, que
+      e o sinal de responsabilidade unica violada.</dd>
+    </dl>
+
+    <p>Os dois eixos sao logaritmicos: sem isso os poucos arquivos enormes empurram todo o
+    resto para um canto.</p>
+
+    <h3>As quatro medidas</h3>
+    <p>Sao duas perguntas, cada uma contada de duas formas.</p>
+    <table class="matrix">
+      <tr><td></td><th>quem depende de mim</th><th>de quem eu dependo</th></tr>
+      <tr><th>direto</th><td>Ca</td><td>Ce</td></tr>
+      <tr><th>e por tabela</th><td>Ca*</td><td>Ce*</td></tr>
+    </table>
+    <p><b>Ca</b> conta quem escreve o import deste arquivo. <b>Ca*</b> conta a cadeia inteira.
+    Neste relatorio, <code>auth.guard.ts</code> tem Ca 11 e Ca* 21: onze arquivos o importam,
+    mas vinte e um param se ele quebrar, porque outros dez chegam nele atraves daqueles onze.</p>
+    <p>Respondem a coisas diferentes. <b>Ca e quantos lugares voce precisa editar</b> se mudar a
+    interface dele; <b>Ca* e quanto do sistema para</b> se voce errar.</p>
+
+    <h3>Beneficio e dificuldade</h3>
+    <p><b>Ca* e o beneficio de refatorar.</b> Arrumar um arquivo de Ca* 100 tira o risco de cem
+    modulos de uma vez; um de Ca* 2 protege dois. Por isso a fila comeca pelos maiores.</p>
+    <p><b>Ce* e a dificuldade.</b> E tudo que este arquivo alcanca pela cadeia, e cada um deles
+    pode quebrar o seu trabalho enquanto ele esta pela metade. Entre dois alvos de beneficio
+    parecido, comece pelo de Ce* menor.</p>
+
+    <h3>As cores</h3>
     <div class="legend">
       <span class="is-pain">na fila de refatoracao</span>
       <span class="is-flagged">outro detector disparou</span>
+      <span class="is-smell">anel: mais de um detector</span>
       <span>nenhum detector</span>
     </div>
-    <h3>As metricas</h3>
-    <p><b>Ca*</b> beneficio de refatorar. <b>Ce*</b> dificuldade: quantos modulos podem
-    quebrar este enquanto se mexe nele.</p>
+    <p><b>Vermelho</b> caiu na zona de dor: muitos dependem dele <b>e</b> ele e grande. E onde
+    comecar.</p>
+    <p><b>Ambar</b> nao esta na zona de dor, mas um detector estrutural acusou &mdash; um
+    problema que a posicao no grafico nao mostra. Passe o mouse para ver qual:</p>
+    <dl class="glossary">
+      <dt>amplificador</dt>
+      <dd>Pequeno, mas muitos o importam e ele importa muitos. Repassa o risco de tudo que
+      conhece para todos que o conhecem, sem parecer grande.</dd>
+      <dt>controller como dependencia</dt>
+      <dd>Um controller deveria ser chamado pela rota, nao importado por outros arquivos.
+      Quando e importado, virou biblioteca sem querer.</dd>
+      <dt>ciclo</dt>
+      <dd>Dois ou mais arquivos que dependem uns dos outros. Nao da para entender, testar nem
+      mexer em um sem os outros.</dd>
+      <dt>violacao de direcao</dt>
+      <dd>Uma camada de baixo importando uma de cima &mdash; um model puxando um controller.</dd>
+      <dt>orfao</dt>
+      <dd>Ninguem o importa e ele nao importa ninguem. Ou e ponto de entrada, ou e codigo morto.</dd>
+    </dl>
+    <p><b>O anel em volta do ponto</b> quer dizer que ele disparou <b>mais de um</b> detector:
+    ja esta na fila por posicao e ainda carrega um problema estrutural por cima, ou acumula dois
+    problemas estruturais. Sao os que rendem mais por refatoracao, porque uma passada resolve
+    duas coisas. Passe o mouse para ver quais sao.</p>
+    <p><b>Azul e bom:</b> nenhum detector encontrou problema estrutural. No canto inferior
+    direito ele e fundacao do sistema &mdash; pequeno e muito usado, exatamente o que se espera
+    de um utilitario. Nao mexa.</p>
+
+    <h3>Explorar as ligacoes</h3>
+    <p>Passe o mouse sobre um ponto para ver o nome, a zona e as ligacoes: linha cheia e o que
+    ele <b>usa</b>, linha tracejada e <b>quem depende dele</b>. Clique para fixar, e entao
+    percorra as ligacoes com o mouse para descobrir o nome e a zona de cada vizinho.</p>
+    <p>Vizinho que o Top N escondeu volta esmaecido &mdash; o filtro nunca esconde uma ligacao.</p>
+    <p class="note" id="domain-note" hidden>Um dominio toma o <b>maior Ca*</b> entre os seus
+    arquivos e a <b>soma</b> das linhas deles, entao a posicao dele no grafico pode vir de dois
+    arquivos diferentes. As coordenadas reais de um arquivo estao em <b>Por arquivo</b>.</p>
+
     <h3>Este relatorio</h3>
     <ul class="stats">${statsMarkup(report)}</ul>
     <p class="provenance">${provenance(report)}</p>
@@ -212,6 +293,27 @@ const TIERS = ['pain', 'amplifier', 'leafAsDependency'];
 const NO_DOMAIN = '(sem dominio)';
 const DEPTHS = [['1', '1'], ['2', '2'], ['Infinity', 'tudo']];
 const MAX_LINKS = 25;
+const DETECTORS = {
+  pain: 'na fila de refatoracao',
+  amplifier: 'amplificador',
+  leafAsDependency: 'controller como dependencia',
+  directionViolation: 'violacao de direcao',
+  cycle: 'ciclo',
+  orphan: 'orfao',
+};
+const HEADS = {
+  path: 'Caminho do arquivo no repositorio.',
+  domain: 'Feature a que ele pertence, tirada da pasta ou do nome.',
+  layer: 'Camada: component, service, model, controller, middleware...',
+  apps: 'Em quais aplicacoes este dominio existe.',
+  files: 'Quantos arquivos o dominio reune.',
+  loc: 'Linhas de codigo. Mede exposicao, nao qualidade: quanto maior, maior a chance de errar ao mexer.',
+  ce: 'De quantos modulos ele depende diretamente. Se qualquer um quebrar, ele quebra junto.',
+  ca: 'Quantos modulos o importam diretamente. E quantos lugares voce precisa editar se mudar a interface dele.',
+  caStar: 'Raio de explosao: quantos param se ele quebrar, contando os que dependem dele por tabela. E o beneficio de refatorar.',
+  ceStar: 'Tudo que ele alcanca pela cadeia. Cada um pode quebrar o seu trabalho enquanto ele esta pela metade. E a dificuldade.',
+  i: 'Instabilidade, Ce / (Ca + Ce). Perto de 0 muitos dependem dele e ele de poucos - mexer e arriscado. Perto de 1 e folha: quase ninguem depende dele.',
+};
 
 let sortKey = 'caStar';
 let sortDir = -1;
@@ -262,6 +364,12 @@ function esc(value) {
 function num(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function detectorNames(flags) {
+  return (flags || []).map(function (name) {
+    return DETECTORS[name] === undefined ? name : DETECTORS[name];
+  });
 }
 
 function absent(value) {
@@ -468,7 +576,7 @@ function draw(nodes) {
       : flags.length > 0 ? 'var(--warn)' : 'var(--accent)';
     const tip = esc(node.path) + ' - Ca* ' + num(node.caStar) +
       ', LOC ' + num(node.loc) + ', Ce ' + num(node.ce) +
-      (flags.length > 0 ? ' - ' + flags.join(', ') : '');
+      (flags.length > 0 ? ' - ' + detectorNames(flags).join(', ') : '');
     parts.push(
       '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + radius.toFixed(1) +
       '" fill="' + fill + '" fill-opacity="0.7" stroke="var(--bg)" stroke-width="0.5" data-path="' +
@@ -501,7 +609,8 @@ function table(nodes) {
   const head = document.querySelector('#table thead');
   head.innerHTML = '<tr>' + keys.map(function (key) {
     const marker = key === sortKey ? (sortDir === -1 ? ' ▾' : ' ▴') : '';
-    return '<th data-key="' + key + '">' + key + marker + '</th>';
+    const hint = HEADS[key] === undefined ? '' : ' title="' + esc(HEADS[key]) + '"';
+    return '<th data-key="' + key + '"' + hint + '>' + key + marker + '</th>';
   }).join('') + '</tr>';
 
   const body = document.querySelector('#table tbody');
@@ -663,11 +772,14 @@ function card(path) {
       return '<li><span>' + esc(entry[0]) + '</span><b>' +
         (absent(entry[1]) ? '-' : esc(entry[1])) + '</b></li>';
     }).join('') + '</ul>' +
-    '<p>' + (flags.length > 0 ? esc(flags.join(', ')) : 'nenhum detector') + '</p>' +
+    '<p>' + (flags.length > 0 ? esc(detectorNames(flags).join(', ')) : 'nenhum detector') + '</p>' +
     '<p>Profundidade: ' + DEPTHS.map(function (entry) {
       return '<button data-depth="' + entry[0] + '"' +
         (String(depth) === entry[0] ? ' class="on"' : '') + '>' + entry[1] + '</button>';
     }).join('') + '</p>' +
+    '<p class="hint"><b>1</b> so quem ele toca direto: o que quebra na hora. ' +
+    '<b>2</b> mais um salto, quem depende de quem depende dele. ' +
+    '<b>tudo</b> a cadeia ate o fim &mdash; o total que entra e exatamente o Ca* acima.</p>' +
     '<p class="links"><b>depende de:</b> ' + linkList(links.out.get(path) || []) + '</p>' +
     '<p class="links"><b>dependem dele:</b> ' + linkList(links.inbound.get(path) || []) + '</p>';
 }

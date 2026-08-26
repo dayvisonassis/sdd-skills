@@ -1031,3 +1031,75 @@ test('decoration drawn over a point does not steal its cursor', () => {
     assert.equal(rule.indexOf(className) !== -1, true, className + ' still takes the cursor')
   }
 })
+
+
+test('every mark the chart draws is explained in the sidebar', () => {
+  // This exists because the smell ring shipped without a legend entry and the
+  // person it was built for could not remember what it meant. A visual encoding
+  // nobody can decode is worse than one that is absent: it looks like it means
+  // something.
+  const html = renderHtml(ZONED)
+  const sidebar = html.slice(html.indexOf('Como ler'), html.indexOf('<script>'))
+  const explained = [
+    'Ca*', 'LOC', 'Ce*', 'Ce', 'Ca',
+    'raio de explosao', 'Tamanho do ponto',
+    'anel',
+    'amplificador', 'controller como dependencia', 'ciclo',
+    'violacao de direcao', 'orfao',
+    'logaritmicos',
+  ]
+  for (const term of explained) {
+    assert.equal(sidebar.indexOf(term) !== -1, true, term + ' is drawn but never explained')
+  }
+})
+
+test('the ring appears in the legend, not only in prose', () => {
+  const html = renderHtml(ZONED)
+  const legend = html.slice(html.indexOf('<div class="legend">'), html.indexOf('</div>', html.indexOf('<div class="legend">')))
+  assert.equal(legend.indexOf('is-smell') !== -1, true)
+  assert.equal(legend.indexOf('is-pain') !== -1, true)
+  assert.equal(legend.indexOf('is-flagged') !== -1, true)
+})
+
+test('every table column says what it means on hover', () => {
+  // caStar, ceStar and i are unreadable as bare column names to anyone who has
+  // not studied coupling metrics - which is everyone the report is for.
+  const html = renderHtml(ZONED)
+  const harness = evaluate(html, { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  const heads = harness.head().querySelectorAll('th')
+  assert.equal(heads.length > 0, true)
+  for (const th of heads) {
+    assert.match(th.tag, /title="[^"]{20,}"/, th.dataset.key + ' has no usable hint')
+  }
+})
+
+
+test('the card names a detector in words, never by its internal key', () => {
+  // 'pain' and 'leafAsDependency' are how the code spells them; neither means
+  // anything to a reader, and the sidebar explains them under other names.
+  const harness = evaluate(renderHtml(ZONED), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  harness.point('pain/also-cyclic.ts').onclick()
+  const card = harness.card()
+  assert.equal(card.indexOf('na fila de refatoracao') !== -1, true)
+  assert.equal(card.indexOf('ciclo') !== -1, true)
+  assert.equal(/pain/.test(card.replace(/class="[^"]*"/g, '')), false)
+  assert.equal(card.indexOf('leafAsDependency') !== -1, false)
+})
+
+
+test('the words the card uses are the words the sidebar defines', () => {
+  // A reader who sees 'controller como dependencia' on a point goes looking for
+  // that phrase in the guide. If the two drift apart the explanation is there
+  // and still unreachable.
+  const html = renderHtml(ZONED)
+  const sidebar = html.slice(html.indexOf('Como ler'), html.indexOf('<script>'))
+  const source = html.slice(html.indexOf('const DETECTORS'), html.indexOf('const HEADS'))
+  const names = [...source.matchAll(/'([^']+)',/g)].map(match => match[1])
+  assert.equal(names.length >= 5, true)
+  for (const name of names) {
+    if (name === 'na fila de refatoracao') continue
+    assert.equal(sidebar.indexOf(name) !== -1, true, name + ' is shown but never defined')
+  }
+})
