@@ -59,13 +59,20 @@ function element() {
     // Cached against the markup it was parsed from, so a second query over
     // unchanged markup returns the SAME objects: the script binds handlers on
     // the first call and the test reads them back on the second.
+    //
+    // One entry PER SELECTOR, not one entry total. A single slot meant that
+    // binding circles and then lines threw the circles away, so handlers
+    // attached to the first were invisible to anything that asked again - a
+    // harness limitation that looked exactly like a missing binding.
     querySelectorAll(selector) {
-      const key = selector + ' ' + this.innerHTML
-      if (this.cachedFor !== key) {
-        this.cachedFor = key
-        this.cached = parseTags(this.innerHTML, selector)
+      if (this.cachedFor !== this.innerHTML) {
+        this.cachedFor = this.innerHTML
+        this.cached = new Map()
       }
-      return this.cached
+      if (!this.cached.has(selector)) {
+        this.cached.set(selector, parseTags(this.innerHTML, selector))
+      }
+      return this.cached.get(selector)
     },
   }
 }
@@ -538,7 +545,13 @@ test('the aggregation caveat is shown for domains and hidden for files', () => {
 // Task 8 - hover, the detail card and the focus depth control.
 // ---------------------------------------------------------------------------
 
-const lines = markup => [...markup.matchAll(/<line\b[^>]*>/g)].map(match => match[0])
+// Every edge emits two <line> elements: the visible one and a fat transparent
+// twin that carries data-path so the far end can be identified on hover. A
+// count of edges has to exclude the twin, exactly as the node count excludes
+// the smell ring.
+const allLines = markup => [...markup.matchAll(/<line\b[^>]*>/g)].map(match => match[0])
+const lines = markup => allLines(markup).filter(tag => tag.indexOf('class="hit"') === -1)
+const hits = markup => allLines(markup).filter(tag => tag.indexOf('class="hit"') !== -1)
 
 const file = (path, over) => ({
   path,
@@ -911,27 +924,110 @@ test('a second detector earns a smell ring, a single one does not', () => {
   assert.equal(smells(chart).length, 1)
 })
 
-test('files in the queue are named on the chart, others are not', () => {
-  const named = texts(zoned().chart(), 'point-label')
-  assert.equal(named.indexOf('big.ts') !== -1, true)
-  assert.equal(named.indexOf('also-cyclic.ts') !== -1, true)
-  assert.equal(named.indexOf('tiny.ts') !== -1, false)
+test('no name is printed until the cursor asks for one', () => {
+  // Naming some points and not others read as arbitrary - the reader cannot
+  // tell whether an unnamed point is unimportant or merely unlucky with space.
+  // Names are now on demand, so every point answers the same way.
+  assert.equal(texts(zoned().chart(), 'nametag-name').length, 0)
 })
 
-test('a name is dropped rather than printed on top of a point', () => {
-  // Five pain files on nearly the same spot. Overlapping text is unreadable and
-  // reads as a defect, so fewer names is the better failure.
-  const crowded = {
+test('hovering a point names it and says which zone it is in', () => {
+  const harness = zoned()
+  harness.point('pain/big.ts').onmouseenter()
+  const tag = harness.document.getElementById('nametag').innerHTML
+  assert.equal(tag.indexOf('big.ts') !== -1, true)
+  assert.equal(tag.indexOf('ZONA DE DOR') !== -1, true)
+  harness.point('pain/big.ts').onmouseleave()
+  assert.equal(harness.document.getElementById('nametag').innerHTML, '')
+})
+
+test('the zone in the tag follows the cuts, corner by corner', () => {
+  const corners = [
+    { path: 'q/pain.ts', loc: 900, caStar: 40, zone: 'ZONA DE DOR' },
+    { path: 'q/debt.ts', loc: 900, caStar: 2, zone: 'divida contida' },
+    { path: 'q/base.ts', loc: 20, caStar: 40, zone: 'fundacao saudavel' },
+    { path: 'q/quiet.ts', loc: 20, caStar: 2, zone: 'baixo risco' },
+  ]
+  const report = {
     ...ZONED,
-    files: [0, 1, 2, 3, 4].map(index => ({
-      path: 'crowd/f' + index + '.ts', app: 'x', domain: 'c', layer: 'service',
-      loc: 900 + index, ce: 2, ca: 20, ceStar: 3, caStar: 40, i: 0.1,
-      dependsOn: [], dependedOnBy: [], detectors: ['pain'],
+    files: corners.map(corner => ({
+      path: corner.path, app: 'x', domain: 'q', layer: 'service',
+      loc: corner.loc, ce: 1, ca: 1, ceStar: 1, caStar: corner.caStar, i: 0.5,
+      dependsOn: [], dependedOnBy: [], detectors: [],
     })),
+    detectors: { ...ZONED.detectors, pain: [] },
   }
-  const harness = evaluate(renderHtml(crowded), { unit: 'file', topn: '0' })
+  const harness = evaluate(renderHtml(report), { unit: 'file', topn: '0' })
   harness.api.refresh()
-  const named = texts(harness.chart(), 'point-label')
-  assert.equal(named.length < 5, true)
-  assert.equal(new Set(named).size, named.length)
+  for (const corner of corners) {
+    harness.point(corner.path).onmouseenter()
+    const tag = harness.document.getElementById('nametag').innerHTML
+    assert.equal(tag.indexOf(corner.zone) !== -1, true, corner.path + ' -> ' + corner.zone)
+  }
+})
+
+test('a neighbour outside the Top N can be identified without the table', () => {
+  // The complaint this answers: the overlay showed WHERE the neighbours are but
+  // never WHICH they are, so a link landing in the pain zone was
+  // indistinguishable from one landing in low risk.
+  const files = [
+    file('hub.ts', { loc: 900, ce: 1, caStar: 90, ceStar: 1, dependsOn: ['far.ts'], detectors: ['pain'] }),
+    file('far.ts', { loc: 5000, ca: 1, caStar: 200, dependedOnBy: ['hub.ts'] }),
+  ]
+  const harness = evaluate(renderHtml(asReport(files)), { unit: 'file', topn: '1' })
+  harness.api.refresh()
+  harness.point('hub.ts').onmouseenter()
+
+  const ghost = harness.document
+    .getElementById('overlay')
+    .querySelectorAll('circle')
+    .find(node => node.dataset.path === 'far.ts')
+  assert.notEqual(ghost, undefined)
+  ghost.onmouseenter()
+  const tag = harness.document.getElementById('nametag').innerHTML
+  assert.equal(tag.indexOf('far.ts') !== -1, true)
+  assert.equal(tag.indexOf('ZONA DE DOR') !== -1, true)
+})
+
+test('an edge carries the identity of the node at its far end', () => {
+  const files = [
+    file('hub.ts', { loc: 900, ce: 1, caStar: 90, ceStar: 1, dependsOn: ['far.ts'], detectors: ['pain'] }),
+    file('far.ts', { loc: 5000, ca: 1, caStar: 200, dependedOnBy: ['hub.ts'] }),
+  ]
+  const harness = evaluate(renderHtml(asReport(files)), { unit: 'file', topn: '1' })
+  harness.api.refresh()
+  harness.point('hub.ts').onmouseenter()
+
+  const overlay = harness.overlay()
+  assert.equal(lines(overlay).length, 1)
+  assert.equal(hits(overlay).length, 1)
+  const hit = harness.document
+    .getElementById('overlay')
+    .querySelectorAll('line')
+    .find(node => node.dataset.path === 'far.ts')
+  assert.notEqual(hit, undefined)
+  hit.onmouseenter()
+  assert.equal(harness.document.getElementById('nametag').innerHTML.indexOf('far.ts') !== -1, true)
+})
+
+
+test('everything hoverable inside the overlay opts back into the cursor', () => {
+  // #overlay is pointer-events: none so it does not swallow clicks meant for
+  // the chart beneath it. Anything in there that must be hovered has to say so
+  // explicitly - the ghost points were bound, drawn and completely inert until
+  // they did, which no unit test could have seen.
+  const html = renderHtml(ZONED)
+  assert.match(html, /#overlay\s*\{[^}]*pointer-events:\s*none/)
+  assert.match(html, /\.ghost\s*\{[^}]*pointer-events:\s*visiblePainted/)
+  assert.match(html, /\.hit\s*\{[^}]*pointer-events:\s*stroke/)
+})
+
+test('decoration drawn over a point does not steal its cursor', () => {
+  // A node at Ca* 0 sits exactly on the Y axis, which is drawn after it and was
+  // swallowing every hover aimed at that point.
+  const html = renderHtml(ZONED)
+  const rule = html.match(/([^{}]*)\{\s*pointer-events:\s*none;\s*\}/g).join(' ')
+  for (const className of ['.axis', '.grid', '.cut', '.tick', '.edge', '.zone-pain']) {
+    assert.equal(rule.indexOf(className) !== -1, true, className + ' still takes the cursor')
+  }
 })

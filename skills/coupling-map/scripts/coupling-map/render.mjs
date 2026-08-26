@@ -102,7 +102,23 @@ circle { cursor: pointer; }
 .zone-sub { font-size: 9px; fill: var(--muted); opacity: 0.85; }
 .cut { stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 5 4; }
 .cut-value { font-size: 9px; fill: var(--muted); }
-.point-label { font-size: 10px; fill: var(--ink); opacity: 0.85; }
+.nametag-box { fill: var(--panel); stroke: var(--line); rx: 3; }
+.nametag-name { font-size: 11px; fill: var(--ink); font-weight: 600; }
+.nametag-meta { font-size: 10px; fill: var(--muted); }
+.nametag-zone.on-pain { fill: var(--pain); }
+.nametag-zone.on-ok { fill: var(--ok); }
+.nametag-zone { font-size: 10px; }
+.hit { stroke: transparent; stroke-width: 9; pointer-events: stroke; cursor: pointer; }
+/* Only the data receives the cursor. Decoration drawn after a point would
+   otherwise sit on top of it: a node at Ca* 0 lands exactly on the Y axis, and
+   the axis line was swallowing every hover aimed at it. */
+.axis, .grid, .cut, .tick, .axis-label, .edge,
+.zone-pain, .zone-debt, .zone-ok, .zone-label, .zone-sub, .cut-value,
+#nametag { pointer-events: none; }
+/* #overlay is pointer-events: none so it does not swallow clicks meant for the
+   chart underneath. Anything inside it that IS meant to be hovered has to opt
+   back in one by one - the ghost points and the fat hit lines. */
+.ghost { cursor: pointer; pointer-events: visiblePainted; }
 .smell { fill: none; stroke: var(--ink); stroke-opacity: 0.65; stroke-width: 1.3; }
 .axis { stroke: var(--line); }
 .grid { stroke: var(--line); stroke-opacity: 0.55; stroke-dasharray: 2 4; }
@@ -205,6 +221,7 @@ let graphs = null;
 let focus = null;
 let hover = null;
 let depth = 1;
+let painted = null;
 
 function unit() {
   return document.getElementById('unit').value;
@@ -344,44 +361,17 @@ function radiusOf(node) {
   return 3 + Math.min(9, Math.log2(num(node.ce) + 1) * 2);
 }
 
-function overlapsCircle(left, right, top, bottom, drawn, self) {
-  for (const other of drawn) {
-    if (other === self) continue;
-    const pad = other.r + 1.5;
-    if (other.x + pad > left && other.x - pad < right &&
-        other.y + pad > top && other.y - pad < bottom) return true;
-  }
-  return false;
-}
-
-function labelSpot(item, width, drawn, boxes) {
-  const gap = item.r + 6;
-  const options = [
-    { x: item.x + gap, y: item.y + 3.5, anchor: 'start' },
-    { x: item.x - gap, y: item.y + 3.5, anchor: 'end' },
-    { x: item.x, y: item.y - item.r - 6, anchor: 'middle' },
-    { x: item.x, y: item.y + item.r + 12, anchor: 'middle' },
-  ];
-  for (const option of options) {
-    const left = option.anchor === 'start' ? option.x
-      : option.anchor === 'end' ? option.x - width : option.x - width / 2;
-    const right = left + width;
-    const top = option.y - 9;
-    const bottom = option.y + 3;
-    if (left < PLOT.left || right > PLOT.right) continue;
-    if (top < PLOT.top || bottom > PLOT.bottom) continue;
-    if (overlapsCircle(left, right, top, bottom, drawn, item)) continue;
-    let clear = true;
-    for (const box of boxes) {
-      if (box.left < right && box.right > left && box.top < bottom && box.bottom > top) {
-        clear = false;
-        break;
-      }
-    }
-    if (!clear) continue;
-    return { x: option.x, y: option.y, anchor: option.anchor, left: left, right: right, top: top, bottom: bottom };
-  }
-  return null;
+function zoneOf(node) {
+  const cuts = (REPORT.meta && REPORT.meta.cuts) || {};
+  const cutCa = num(cuts.painCaStar);
+  const cutLoc = num(cuts.painLoc);
+  if (cutCa <= 0 || cutLoc <= 0) return { text: '', tone: '' };
+  const wide = num(node.caStar) >= cutCa;
+  const big = num(node.loc) >= cutLoc;
+  if (wide && big) return { text: 'ZONA DE DOR', tone: 'on-pain' };
+  if (big) return { text: 'divida contida', tone: '' };
+  if (wide) return { text: 'fundacao saudavel', tone: 'on-ok' };
+  return { text: 'baixo risco', tone: '' };
 }
 
 function zoneMarkup(limits) {
@@ -458,6 +448,7 @@ function draw(nodes) {
   parts.push('<text class="axis-label" x="375" y="448" text-anchor="middle">Ca* - raio de explosao (log)</text>');
   parts.push('<text class="axis-label" x="14" y="215" text-anchor="middle" transform="rotate(-90 14 215)">LOC (log)</text>');
   parts.push('<g id="overlay"></g>');
+  parts.push('<g id="nametag"></g>');
 
   const drawn = [];
   for (const node of nodes) {
@@ -489,16 +480,6 @@ function draw(nodes) {
     }
   }
 
-  const boxes = [];
-  for (const item of drawn) {
-    if ((item.node.detectors || []).indexOf('pain') === -1) continue;
-    const name = String(item.node.path).split('/').pop();
-    const width = name.length * 5.1;
-    const spot = labelSpot(item, width, drawn, boxes);
-    if (spot === null) continue;
-    boxes.push(spot);
-    parts.push(label('point-label', spot.x, spot.y, spot.anchor, name));
-  }
 
   svg.innerHTML = parts.join('');
   document.getElementById('summary').textContent =
@@ -616,12 +597,15 @@ function neighbourhood(path, depth) {
   return { out: reach(links.out, path, depth), inbound: reach(links.inbound, path, depth) };
 }
 
-function edgeMarkup(from, to, outbound, solid) {
-  return '<line class="edge" x1="' + from.x.toFixed(1) + '" y1="' + from.y.toFixed(1) +
-    '" x2="' + to.x.toFixed(1) + '" y2="' + to.y.toFixed(1) +
-    '" stroke="' + (outbound ? 'var(--pain)' : 'var(--accent)') + '" stroke-width="1"' +
+function edgeMarkup(from, to, outbound, solid, path) {
+  const coords = ' x1="' + from.x.toFixed(1) + '" y1="' + from.y.toFixed(1) +
+    '" x2="' + to.x.toFixed(1) + '" y2="' + to.y.toFixed(1) + '"';
+  const visible = '<line class="edge"' + coords +
+    ' stroke="' + (outbound ? 'var(--pain)' : 'var(--accent)') + '" stroke-width="1"' +
     (outbound ? '' : ' stroke-dasharray="3 3"') +
     ' stroke-opacity="' + (solid ? '0.9' : '0.3') + '"/>';
+  if (path === undefined) return visible;
+  return visible + '<line class="hit"' + coords + ' data-path="' + esc(path) + '"/>';
 }
 
 function overlayMarkup(path, depth) {
@@ -637,21 +621,21 @@ function overlayMarkup(path, depth) {
   for (const target of near.out) {
     const row = index.get(target);
     if (row === undefined) continue;
-    parts.push(edgeMarkup(start, pointOf(row, limits), true, shown.has(target)));
+    parts.push(edgeMarkup(start, pointOf(row, limits), true, shown.has(target), target));
     if (!shown.has(target)) faded.add(target);
   }
   for (const source of near.inbound) {
     const row = index.get(source);
     if (row === undefined) continue;
-    parts.push(edgeMarkup(pointOf(row, limits), start, false, shown.has(source)));
+    parts.push(edgeMarkup(pointOf(row, limits), start, false, shown.has(source), source));
     if (!shown.has(source)) faded.add(source);
   }
   for (const hidden of faded) {
     const row = index.get(hidden);
     const point = pointOf(row, limits);
     parts.push('<circle class="ghost" cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) +
-      '" r="' + radiusOf(row).toFixed(1) + '" fill="var(--muted)" fill-opacity="0.35">' +
-      '<title>' + esc(row.path) + '</title></circle>');
+      '" r="' + radiusOf(row).toFixed(1) + '" fill="var(--muted)" fill-opacity="0.35" data-path="' +
+      esc(row.path) + '"><title>' + esc(row.path) + '</title></circle>');
   }
   parts.push('<circle class="ring" cx="' + start.x.toFixed(1) + '" cy="' + start.y.toFixed(1) +
     '" r="' + (radiusOf(origin) + 4).toFixed(1) +
@@ -688,10 +672,69 @@ function card(path) {
     '<p class="links"><b>dependem dele:</b> ' + linkList(links.inbound.get(path) || []) + '</p>';
 }
 
+function showName(path) {
+  const row = byPath().get(path);
+  const tag = document.getElementById('nametag');
+  if (row === undefined || tag === null) return;
+  const point = pointOf(row, axes());
+  const name = String(row.path).split('/').pop();
+  const zone = zoneOf(row);
+  const meta = 'Ca* ' + num(row.caStar) + '  LOC ' + num(row.loc) + '  Ce ' + num(row.ce);
+  const width = Math.max(name.length * 6.6, (meta.length + zone.text.length + 2) * 5.9) + 22;
+  const height = 40;
+  let x = point.x + radiusOf(row) + 10;
+  if (x + width > PLOT.right) x = point.x - width - 10;
+  if (x < PLOT.left) x = PLOT.left;
+  let y = point.y - height / 2;
+  if (y < PLOT.top) y = PLOT.top;
+  if (y + height > PLOT.bottom) y = PLOT.bottom - height;
+  tag.innerHTML =
+    '<rect class="nametag-box" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+    '" width="' + width.toFixed(1) + '" height="' + height + '"/>' +
+    '<text class="nametag-name" x="' + (x + 8).toFixed(1) + '" y="' + (y + 16).toFixed(1) + '">' +
+    esc(name) + '</text>' +
+    '<text class="nametag-meta" x="' + (x + 8).toFixed(1) + '" y="' + (y + 31).toFixed(1) + '">' +
+    esc(meta) + '  <tspan class="nametag-zone ' + zone.tone + '">' + esc(zone.text) + '</tspan></text>';
+}
+
+function clearName() {
+  const tag = document.getElementById('nametag');
+  if (tag !== null) tag.innerHTML = '';
+}
+
+function bindOverlay() {
+  const overlay = document.getElementById('overlay');
+  if (overlay === null) return;
+  const targets = [];
+  for (const node of overlay.querySelectorAll('circle')) targets.push(node);
+  for (const node of overlay.querySelectorAll('line')) targets.push(node);
+  for (const node of targets) {
+    const path = node.dataset.path;
+    if (path === undefined) continue;
+    node.onmouseenter = function () { showName(path); };
+    node.onmouseleave = function () { clearName(); };
+    node.onclick = function () {
+      focus = path;
+      hover = path;
+      syncCard();
+      paint();
+    };
+  }
+}
+
+function paintKey(path) {
+  if (path === null) return '';
+  return path + '|' + depth + '|' + unit() + '|' + document.getElementById('topn').value;
+}
+
 function paint() {
   const path = hover === null ? focus : hover;
+  const key = paintKey(path);
+  if (key === painted) return;
+  painted = key;
   document.getElementById('overlay').innerHTML =
     path === null ? '' : overlayMarkup(path, depth);
+  bindOverlay();
 }
 
 function bindDepth() {
@@ -717,10 +760,12 @@ function bindChart() {
     circle.onmouseenter = function () {
       hover = path;
       paint();
+      showName(path);
     };
     circle.onmouseleave = function () {
       hover = null;
       paint();
+      clearName();
     };
     circle.onclick = function () {
       focus = focus === path ? null : path;
@@ -732,6 +777,7 @@ function bindChart() {
 }
 
 function refresh() {
+  painted = null;
   const nodes = visible();
   hover = null;
   document.getElementById('domain-note').hidden = unit() !== 'domain';
