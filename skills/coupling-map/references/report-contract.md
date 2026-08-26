@@ -51,13 +51,13 @@ measured.
   "totals": {
     "files": 959,                 // nodes in the graph, after path normalisation
     "edges": 3139,                // resolved import edges
-    "declared": 3026,             // internal imports counted in the source text
-    "coveragePct": 103.7,         // 100 * edges / declared, one decimal
+    "declared": 3072,             // internal imports counted in the source text
+    "coveragePct": 102.2,         // 100 * edges / declared, one decimal
     "unclassified": 28,           // files whose domain is "(sem dominio)"
     "unreadable": 0,              // files madge listed that could not be read; loc counted as 0
     "coverageByApp": [
       { "name": "frontend", "files": 679, "edges": 2468, "declared": 2413, "unreadable": 0, "coveragePct": 102.3 },
-      { "name": "backend",  "files": 280, "edges": 671,  "declared": 613,  "unreadable": 0, "coveragePct": 109.5 }
+      { "name": "backend",  "files": 280, "edges": 671,  "declared": 659,  "unreadable": 0, "coveragePct": 101.8 }
     ]
   },
   "files": [],
@@ -69,7 +69,9 @@ measured.
 `meta.cuts` is copied in on purpose: reading an old report must not require finding the config that
 produced it.
 
-`totals.coveragePct` above 100 is normal and expected — `declared` is a deliberate undercount. See
+`totals.coveragePct` above 100 is normal and expected — `declared` is a regex count over the
+source, and it still misses multi-line and bare imports. It counts `require()` as of the fix in
+`declared.mjs`, because undercounting reads as higher coverage and a quieter guard. See
 `config-schema.md`.
 
 `totals.coverageByApp` exists because the floor is checked per app as well as in total: one small

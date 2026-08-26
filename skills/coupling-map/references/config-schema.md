@@ -60,6 +60,22 @@ Two rules govern every field below.
 - **`folder`** — the first path segment that appears in `layers`. `api/v2/models/user.model.js`
   is layer `models`.
 
+### `exclude` — patterns are matched against the path **relative to that app's root**
+
+This is the field most likely to be got wrong on a new project, because the patterns look like
+repo-relative paths and are not. `madge` tests each pattern against the path it uses internally,
+which is relative to that app's `root`. Consequences worth knowing before writing a config:
+
+- `"/docs/"` on an app rooted at `apps/backend/src` matches `../docs/swagger.json` — a file
+  *above* the root, reached because `madge` follows imports out of it — and does **not** match
+  `docs/index.js` sitting directly under the root. Here that is exactly right: the first is a
+  55,580-line generated artefact, the second is real routing code.
+- A pattern written as `"apps/backend/src/legacy/"` matches nothing at all. Write `"legacy/"`.
+- Anchors behave accordingly: `"^config/"` anchors at the root, not at the repository.
+
+When a pattern seems not to work, print the paths first — an app whose files come back as
+`../../shared/x.ts` is telling you the `root` is narrower than the code it is pulling in.
+
 ### `requireLayerForDomain` — why the backend sets it and the frontend does not
 
 On a layer-first backend, `domainFrom: "basename"` applied to a file that lives outside every
@@ -87,16 +103,30 @@ Measured on the PABX monorepo, dropping `tsConfig` from the frontend app:
 |---|---|---|---|
 | frontend **with** `tsConfig` | 2468 | 2413 | 102.3% |
 | frontend **without** | 1394 | 2413 | 57.8% |
-| backend | 671 | 613 | 109.5% |
+| backend | 671 | 659 | 101.8% |
 
 43.5% of the frontend graph disappears, and the report still renders and still looks plausible.
 That is the worst failure this tool can have, and the floor is what prevents it.
 
-Coverage sits **above 100%** because the declared-import count is a regex over the source and
-deliberately undercounts (multi-line imports, `export * from`, side-effect imports, CommonJS
-`require`). It is a floor, never an equality. Do not "fix" it into one, and **never lower the
-floor to make a run pass** — a failing run means the resolution is broken, and the fix is the
-`tsConfig` path or the `extensions` list.
+Coverage sits **above 100%** because the declared-import count is a regex over the source, and a
+regex cannot see everything. It is a floor, never an equality. Do not "fix" it into one, and
+**never lower the floor to make a run pass** — a failing run means the resolution is broken, and
+the fix is the `tsConfig` path or the `extensions` list.
+
+What `countDeclared` sees: static `import ... from`, `export * from`, `export { a } from`,
+dynamic `import(...)`, and **`require(...)`** — relative and resolved-through-`baseUrl` alike, so
+a CommonJS project is measured rather than waved through. What it still misses: an import
+spanning several lines, and a bare side-effect `import './x'`. Both are pinned by
+`scripts/test/declared.test.mjs`, so widening the patterns shows up as a flipped assertion rather
+than as a number that moved on its own.
+
+**The direction of an error here is counter-intuitive.** Coverage is `edges / declared`, so
+undercounting `declared` makes coverage read *higher* and the guard *less* likely to fire — the
+broken report ships, which is the precise failure the floor exists to prevent. Overcounting only
+aborts a healthy run and sends someone to look, which is cheap and self-correcting. When in
+doubt, count it. The one thing never to count is a **package** import: `rxjs`, `@angular/core`
+and `fs` never become edges, so counting them would depress coverage against a denominator
+`madge` was never going to resolve.
 
 The check is applied **per app as well as to the total**, because a single misconfigured small app
 is otherwise diluted by a large healthy one.

@@ -2,17 +2,10 @@ import { readFileSync } from 'node:fs'
 import { join, normalize } from 'node:path'
 import madge from 'madge'
 import { classify } from './taxonomy.mjs'
+import { countDeclared } from './declared.mjs'
 
 const BACKSLASH = String.fromCharCode(92)
 const NO_DOMAIN = '(sem dominio)'
-
-const DECLARED =
-  /(?:^|\n)\s*(?:import|export)\s[^;\n]*?from\s+['"](\.{1,2}\/|app\/|src\/|environments\/|shared\/|core\/)[^'"]*['"]/g
-const DYNAMIC = /import\(\s*['"](\.{1,2}\/|app\/|src\/)[^'"]*['"]\s*\)/g
-
-function countDeclared(text) {
-  return (text.match(DECLARED) || []).length + (text.match(DYNAMIC) || []).length
-}
 
 function readSource(absolute) {
   try {

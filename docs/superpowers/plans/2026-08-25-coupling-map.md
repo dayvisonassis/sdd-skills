@@ -66,12 +66,14 @@ skills/coupling-map/
     arch-report.mjs                 # CLI entry point; orchestrates, writes output
     coupling-map/
       collect.mjs                   # THE ONLY module that imports madge
+      declared.mjs                  # countDeclared(text): the coverage denominator
       taxonomy.mjs                  # path -> { app, domain, layer }
       graph.mjs                     # Tarjan SCC + transitive counts, both directions
       metrics.mjs                   # Ce, Ca, Ce*, Ca*, I, LOC; per-file and per-domain
       detect.mjs                    # the six detectors
       render.mjs                    # standalone HTML
     test/
+      declared.test.mjs
       taxonomy.test.mjs
       graph.test.mjs
       metrics.test.mjs
@@ -1257,9 +1259,9 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 6: Collector, CLI, and the `architecture.json` contract — DONE, with three corrections
+### Task 6: Collector, CLI, and the `architecture.json` contract — DONE, with four corrections
 
-> The code blocks below are what was written first. Against them, three things changed, and one
+> The code blocks below are what was written first. Against them, four things changed, and one
 > line of the plan turned out to be wrong about its own behaviour:
 >
 > 1. **`existsSync` guards the wrong failure.** It answers "is the path there", and the read that
@@ -1280,11 +1282,26 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 >    somebody has to remember to run. Domain and direction-violation counts were added to the
 >    printout for the same reason.
 >
+> 4. **`declared` did not count `require()`, and the reasoning that left it alone was inverted.**
+>    Coverage is `edges / declared`, so undercounting the denominator reads as *higher* coverage
+>    and a *quieter* guard — a false negative, which is the failure the floor exists to prevent,
+>    not the safe direction. It changes almost nothing here (backend 109.5% to 101.8%, total
+>    103.7% to 102.2%, both far above the floor) and that is exactly why it was easy to miss: the
+>    hole opens on some other project, a CommonJS one, where `declared` would count almost
+>    nothing and the guard would report healthy over a collapsed graph. The counting moved into
+>    its own module, `coupling-map/declared.mjs`, for one reason: `collect.mjs` imports `madge`
+>    and cannot be tested in a repository with no `node_modules`, which left the single most
+>    important number in this task covered by nothing but one manual run. `declared.mjs` has no
+>    dependency and `test/declared.test.mjs` pins thirteen cases, including two **known
+>    undercounts left deliberately in place** — a multi-line import and a bare `import './x'`,
+>    87 and 1 occurrence respectively in this monorepo — so that widening the patterns later
+>    shows up as a flipped assertion instead of a number that moved on its own.
+>
 > `render.mjs` is a **throwaway stub** committed in `064b68c` purely so the CLI can be imported
 > before Task 7 exists. Task 7 replaces the whole file.
 >
 > **Verified end to end against the real repository:** 959 nodes, 196 domains, 3139 edges,
-> coverage 103.7% total / 102.3% frontend / 109.5% backend, pain 12, amplifier 1,
+> coverage 102.2% total / 102.3% frontend / 101.8% backend, pain 12, amplifier 1,
 > controller-as-dependency 3, orphans 24, cycles 2, direction violations 14, invariant
 > `Σ Ca* = Σ Ce* = 15987`, two runs byte-identical (same sha256, no date-like token anywhere in
 > the JSON), and acceptance criterion 5 passing in both directions. Path normalisation confirmed
