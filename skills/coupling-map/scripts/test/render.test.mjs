@@ -40,6 +40,17 @@ function element() {
   }
 }
 
+// Reads what the rendered page itself opens on: the option marked selected, or
+// the first one when none is.
+function markupDefault(html, selectId) {
+  const select = html.match(new RegExp('<select id="' + selectId + '">[^]*?</select>'))
+  if (select === null) return undefined
+  const marked = select[0].match(/<option value="([^"]*)"[^>]*selected/)
+  if (marked !== null) return marked[1]
+  const first = select[0].match(/<option value="([^"]*)"/)
+  return first === null ? undefined : first[1]
+}
+
 function evaluate(html, options = {}) {
   const open = html.indexOf('<script>')
   const close = html.lastIndexOf('</script>')
@@ -52,10 +63,12 @@ function evaluate(html, options = {}) {
     if (!nodes.has(key)) nodes.set(key, element())
     return nodes.get(key)
   }
-  // Mirrors the markup defaults: the unit select opens on its first option and
-  // the top-N select on the one marked selected.
-  lookup('unit').value = options.unit ?? 'domain'
-  lookup('topn').value = options.topn ?? '20'
+  // The defaults are READ OUT OF the markup rather than repeated here. Every
+  // call below passes unit explicitly, so a hardcoded default would never be
+  // exercised and could drift away from the page without a test noticing -
+  // which is exactly what happened when the opening unit changed.
+  lookup('unit').value = options.unit ?? markupDefault(html, 'unit')
+  lookup('topn').value = options.topn ?? markupDefault(html, 'topn')
 
   const document = {
     getElementById: id => lookup(id),
@@ -381,4 +394,54 @@ test('markup inside a path cannot escape into the chart or the table', () => {
   assert.equal(new Set(paths).size, 2)
   assert.equal(/<b>/.test(harness.body()), false)
   assert.equal(harness.body().includes('&amp;'), true)
+})
+
+// The bucket is not a module: it aggregates unrelated infrastructure files, so
+// its LOC is their sum and its caStar the maximum of them. On the real report
+// that put it rightmost, highest and largest in the opening view - the top of
+// the refactoring-queue quadrant - for something nobody can refactor.
+const WITH_BUCKET = {
+  ...REPORT,
+  files: [
+    ...REPORT.files,
+    { path: 'environments/environment.ts', app: 'frontend', domain: '(sem dominio)', layer: null, loc: 11, ce: 0, ca: 5, ceStar: 0, caStar: 425, i: 0, dependsOn: [], dependedOnBy: ['a.ts'], detectors: [] },
+  ],
+  domains: [
+    ...REPORT.domains,
+    { domain: '(sem dominio)', apps: ['frontend'], files: 1, loc: 2501, ce: 0, ca: 5, caStar: 425, ceStar: 0 },
+  ],
+}
+
+test('the report opens on files, not on the domain overview', () => {
+  // Top N already made 959 points readable, so the domain default was left over
+  // from a problem that no longer existed - and it opened the report on an
+  // overview instead of on the view that answers the question.
+  assert.equal(markupDefault(renderHtml(REPORT), 'unit'), 'file')
+})
+
+test('the unclassified bucket is never drawn or listed as a domain', () => {
+  const harness = evaluate(renderHtml(WITH_BUCKET), { unit: 'domain', topn: '0' })
+  harness.api.refresh()
+  assert.equal(harness.chart().includes('(sem dominio)'), false)
+  assert.equal(harness.body().includes('(sem dominio)'), false)
+  assert.equal(circles(harness.chart()).length, REPORT.domains.length)
+})
+
+test('the files inside the bucket are still listed one by one', () => {
+  // Excluding the aggregate must not hide its members: the design rule is that
+  // a file is never silently dropped, and the file view is where it is kept.
+  const harness = evaluate(renderHtml(WITH_BUCKET), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  assert.equal(harness.body().includes('environments/environment.ts'), true)
+  assert.equal(circles(harness.chart()).length, WITH_BUCKET.files.length)
+})
+
+test('the aggregation caveat is shown for domains and hidden for files', () => {
+  const asFiles = evaluate(renderHtml(REPORT), { unit: 'file', topn: '0' })
+  asFiles.api.refresh()
+  assert.equal(asFiles.document.getElementById('domain-note').hidden, true)
+
+  const asDomains = evaluate(renderHtml(REPORT), { unit: 'domain', topn: '0' })
+  asDomains.api.refresh()
+  assert.equal(asDomains.document.getElementById('domain-note').hidden, false)
 })

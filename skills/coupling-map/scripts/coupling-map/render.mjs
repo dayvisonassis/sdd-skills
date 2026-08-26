@@ -109,6 +109,7 @@ h3:first-child { margin-top: 0; }
 .stats li { display: flex; justify-content: space-between; gap: 8px;
   border-bottom: 1px solid var(--line); padding: 3px 0; }
 .stats b { font-variant-numeric: tabular-nums; }
+.note { color: var(--muted); border-left: 2px solid var(--line); padding-left: 8px; }
 .provenance { color: var(--muted); font-size: 11px; margin-top: 12px; }
 `
 
@@ -121,7 +122,7 @@ export function renderHtml(report) {
   <div>
     <div class="panel">
       <div class="controls">
-        <select id="unit"><option value="domain">Por dominio</option><option value="file">Por arquivo</option></select>
+        <select id="unit"><option value="file">Por arquivo</option><option value="domain">Por dominio</option></select>
         <select id="topn">
           <option value="10">Top 10</option>
           <option value="20" selected>Top 20</option>
@@ -143,6 +144,9 @@ export function renderHtml(report) {
     Tamanho do ponto: <b>Ce</b>. Os dois eixos sao logaritmicos.</p>
     <p>Canto superior direito e a fila de refatoracao. Canto inferior direito e fundacao
     saudavel: muito dependida e pequena. Nao tocar.</p>
+    <p class="note" id="domain-note" hidden>Um dominio toma o <b>maior Ca*</b> entre os seus
+    arquivos e a <b>soma</b> das linhas deles, entao a posicao dele no grafico pode vir de dois
+    arquivos diferentes. As coordenadas reais de um arquivo estao em <b>Por arquivo</b>.</p>
     <div class="legend">
       <span class="is-pain">na fila de refatoracao</span>
       <span class="is-flagged">outro detector disparou</span>
@@ -165,6 +169,7 @@ const NICE = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000];
 const PLOT = { left: 60, right: 690, top: 30, bottom: 410, width: 630, height: 380 };
 const TICK_GAP = 26;
 const TIERS = ['pain', 'amplifier', 'leafAsDependency'];
+const NO_DOMAIN = '(sem dominio)';
 
 let sortKey = 'caStar';
 let sortDir = -1;
@@ -188,9 +193,9 @@ function withDetectors() {
         if (list.indexOf(name) === -1) list.push(name);
       }
     }
-    domainRows = REPORT.domains.map(d =>
-      Object.assign({}, d, { path: d.domain, detectors: flags[d.domain] || [] })
-    );
+    domainRows = REPORT.domains
+      .filter(d => d.domain !== NO_DOMAIN)
+      .map(d => Object.assign({}, d, { path: d.domain, detectors: flags[d.domain] || [] }));
   }
   return domainRows;
 }
@@ -376,6 +381,7 @@ function table(nodes) {
 
 function refresh() {
   const nodes = visible();
+  document.getElementById('domain-note').hidden = unit() !== 'domain';
   draw(nodes);
   table(nodes);
 }
