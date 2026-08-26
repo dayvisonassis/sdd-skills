@@ -4,7 +4,7 @@ export function computeMetrics({ adj, loc, taxonomy }) {
   const rev = reverse(adj)
   const ceStar = transitiveCounts(adj)
   const caStar = transitiveCounts(rev)
-  const paths = Object.keys(adj).sort()
+  const paths = Object.keys(rev).sort()
 
   const files = paths.map(path => {
     const dependsOn = (adj[path] || []).slice().sort()
@@ -45,7 +45,7 @@ export function computeMetrics({ adj, loc, taxonomy }) {
       caStar: Math.max(...rows.map(r => r.caStar)),
       ceStar: Math.max(...rows.map(r => r.ceStar)),
     }))
-    .sort((a, b) => a.domain.localeCompare(b.domain))
+    .sort((a, b) => (a.domain < b.domain ? -1 : a.domain > b.domain ? 1 : 0))
 
   return { files, domains }
 }

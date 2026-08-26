@@ -79,6 +79,27 @@ test('inside a cycle, Ce* of 0 alongside Ce of 1 is the correct answer', () => {
   assert.equal(sum('caStar'), sum('ceStar'))
 })
 
+test('a node that is only ever a target still gets a row', () => {
+  // Rows used to come from Object.keys(adj), so a file that something imports
+  // but which imports nothing itself had no row at all - and then sum(caStar)
+  // no longer equalled sum(ceStar), breaking acceptance criterion 2 on any
+  // graph the collector had not already closed.
+  const r = computeMetrics({
+    adj: { 'a.ts': ['b.ts'] },
+    loc: { 'a.ts': 10 },
+    taxonomy: { 'a.ts': { app: 'x', domain: 'alpha', layer: 'service' } },
+  })
+  const b = r.files.find(f => f.path === 'b.ts')
+  assert.notEqual(b, undefined)
+  assert.equal(b.ca, 1)
+  assert.equal(b.ce, 0)
+  assert.equal(b.loc, 0)
+  assert.equal(b.domain, '(sem dominio)')
+
+  const sum = k => r.files.reduce((acc, f) => acc + f[k], 0)
+  assert.equal(sum('caStar'), sum('ceStar'))
+})
+
 test('the neighbour lists are carried through for the report card', () => {
   const r = computeMetrics(INPUT)
   assert.deepEqual(rowFor(r, 'b.ts').dependsOn, ['c.ts'])
@@ -104,4 +125,21 @@ test('output ordering is deterministic', () => {
   const b = computeMetrics(INPUT)
   assert.deepEqual(a.files.map(f => f.path), b.files.map(f => f.path))
   assert.deepEqual(a.files.map(f => f.path), ['a.ts', 'b.ts', 'c.ts', 'lonely.ts'])
+})
+
+test('domains sort by code unit, the same order the file list uses', () => {
+  // localeCompare reads the machine's default collator, which puts 'alpha'
+  // before 'Alpha' here and would order these two rows differently on a
+  // differently-localised machine. Comparing two reports is the whole point of
+  // the tool, so the ordering cannot depend on where the report was generated.
+  const mixed = {
+    adj: { 'x.ts': [], 'y.ts': [] },
+    loc: { 'x.ts': 1, 'y.ts': 1 },
+    taxonomy: {
+      'x.ts': { app: 'f', domain: 'alpha', layer: null },
+      'y.ts': { app: 'f', domain: 'Alpha', layer: null },
+    },
+  }
+  const r = computeMetrics(mixed)
+  assert.deepEqual(r.domains.map(d => d.domain), ['Alpha', 'alpha'])
 })
