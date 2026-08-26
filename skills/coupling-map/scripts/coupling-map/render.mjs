@@ -93,6 +93,17 @@ tr.flagged td:first-child { color: var(--warn); }
 .tablewrap { overflow-x: auto; }
 circle { cursor: pointer; }
 #overlay { pointer-events: none; }
+.zone-pain { fill: var(--pain); fill-opacity: 0.08; }
+.zone-debt { fill: var(--warn); fill-opacity: 0.05; }
+.zone-ok { fill: var(--ok); fill-opacity: 0.07; }
+.zone-label { font-size: 10px; letter-spacing: 0.09em; fill: var(--muted); }
+.zone-label.on-pain { fill: var(--pain); }
+.zone-label.on-ok { fill: var(--ok); }
+.zone-sub { font-size: 9px; fill: var(--muted); opacity: 0.85; }
+.cut { stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.cut-value { font-size: 9px; fill: var(--muted); }
+.point-label { font-size: 10px; fill: var(--ink); opacity: 0.85; }
+.smell { fill: none; stroke: var(--ink); stroke-opacity: 0.65; stroke-width: 1.3; }
 .axis { stroke: var(--line); }
 .grid { stroke: var(--line); stroke-opacity: 0.55; stroke-dasharray: 2 4; }
 .tick { fill: var(--muted); font-size: 10px; }
@@ -333,13 +344,99 @@ function radiusOf(node) {
   return 3 + Math.min(9, Math.log2(num(node.ce) + 1) * 2);
 }
 
+function overlapsCircle(left, right, top, bottom, drawn, self) {
+  for (const other of drawn) {
+    if (other === self) continue;
+    const pad = other.r + 1.5;
+    if (other.x + pad > left && other.x - pad < right &&
+        other.y + pad > top && other.y - pad < bottom) return true;
+  }
+  return false;
+}
+
+function labelSpot(item, width, drawn, boxes) {
+  const gap = item.r + 6;
+  const options = [
+    { x: item.x + gap, y: item.y + 3.5, anchor: 'start' },
+    { x: item.x - gap, y: item.y + 3.5, anchor: 'end' },
+    { x: item.x, y: item.y - item.r - 6, anchor: 'middle' },
+    { x: item.x, y: item.y + item.r + 12, anchor: 'middle' },
+  ];
+  for (const option of options) {
+    const left = option.anchor === 'start' ? option.x
+      : option.anchor === 'end' ? option.x - width : option.x - width / 2;
+    const right = left + width;
+    const top = option.y - 9;
+    const bottom = option.y + 3;
+    if (left < PLOT.left || right > PLOT.right) continue;
+    if (top < PLOT.top || bottom > PLOT.bottom) continue;
+    if (overlapsCircle(left, right, top, bottom, drawn, item)) continue;
+    let clear = true;
+    for (const box of boxes) {
+      if (box.left < right && box.right > left && box.top < bottom && box.bottom > top) {
+        clear = false;
+        break;
+      }
+    }
+    if (!clear) continue;
+    return { x: option.x, y: option.y, anchor: option.anchor, left: left, right: right, top: top, bottom: bottom };
+  }
+  return null;
+}
+
+function zoneMarkup(limits) {
+  const cuts = (REPORT.meta && REPORT.meta.cuts) || {};
+  const cutCa = num(cuts.painCaStar);
+  const cutLoc = num(cuts.painLoc);
+  if (cutCa <= 0 || cutLoc <= 0) return [];
+
+  const x = PLOT.left + scale(cutCa, limits.maxX, PLOT.width);
+  const y = PLOT.bottom - scale(cutLoc, limits.maxY, PLOT.height);
+  const wRight = Math.max(0, PLOT.right - x);
+  const wLeft = Math.max(0, x - PLOT.left);
+  const hTop = Math.max(0, y - PLOT.top);
+  const hLow = Math.max(0, PLOT.bottom - y);
+  const out = [];
+
+  out.push(rect('zone-debt', PLOT.left, PLOT.top, wLeft, hTop));
+  out.push(rect('zone-pain', x, PLOT.top, wRight, hTop));
+  out.push(rect('zone-ok', x, y, wRight, hLow));
+
+  out.push(label('zone-label on-pain', PLOT.right - 8, PLOT.top + 15, 'end', 'ZONA DE DOR'));
+  out.push(label('zone-sub', PLOT.right - 8, PLOT.top + 28, 'end', 'refatorar primeiro'));
+  out.push(label('zone-label', PLOT.left + 8, PLOT.top + 15, 'start', 'DIVIDA CONTIDA'));
+  out.push(label('zone-sub', PLOT.left + 8, PLOT.top + 28, 'start', 'grande, pouco dependida'));
+  out.push(label('zone-label on-ok', PLOT.right - 8, PLOT.bottom - 20, 'end', 'FUNDACAO SAUDAVEL'));
+  out.push(label('zone-sub', PLOT.right - 8, PLOT.bottom - 8, 'end', 'muito dependida e pequena - nao tocar'));
+  out.push(label('zone-sub', PLOT.left + 8, PLOT.bottom - 8, 'start', 'baixo risco'));
+
+  out.push('<line class="cut" x1="' + x.toFixed(1) + '" y1="' + PLOT.top +
+    '" x2="' + x.toFixed(1) + '" y2="' + PLOT.bottom + '"/>');
+  out.push('<line class="cut" x1="' + PLOT.left + '" y1="' + y.toFixed(1) +
+    '" x2="' + PLOT.right + '" y2="' + y.toFixed(1) + '"/>');
+  out.push(label('cut-value', x + 4, PLOT.bottom - 6, 'start', 'Ca* ' + cutCa));
+  out.push(label('cut-value', PLOT.left + 4, y - 5, 'start', 'LOC ' + cutLoc));
+
+  return out;
+}
+
+function rect(className, x, y, width, height) {
+  return '<rect class="' + className + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+    '" width="' + width.toFixed(1) + '" height="' + height.toFixed(1) + '"/>';
+}
+
+function label(className, x, y, anchor, text) {
+  return '<text class="' + className + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+    '" text-anchor="' + anchor + '">' + esc(text) + '</text>';
+}
+
 function draw(nodes) {
   const svg = document.getElementById('chart');
   const all = rows();
   const limits = axes();
   const maxX = limits.maxX;
   const maxY = limits.maxY;
-  const parts = [];
+  const parts = zoneMarkup(limits);
 
   for (const value of ticks(maxX, PLOT.width)) {
     const x = (PLOT.left + scale(value, maxX, PLOT.width)).toFixed(1);
@@ -362,22 +459,45 @@ function draw(nodes) {
   parts.push('<text class="axis-label" x="14" y="215" text-anchor="middle" transform="rotate(-90 14 215)">LOC (log)</text>');
   parts.push('<g id="overlay"></g>');
 
+  const drawn = [];
   for (const node of nodes) {
     const point = pointOf(node, limits);
-    const cx = point.x;
-    const cy = point.y;
-    const radius = radiusOf(node);
+    drawn.push({ node: node, x: point.x, y: point.y, r: radiusOf(node) });
+  }
+
+  for (const item of drawn) {
+    const node = item.node;
+    const cx = item.x;
+    const cy = item.y;
+    const radius = item.r;
     const flags = node.detectors || [];
-    const fill = flags.indexOf('pain') !== -1
+    const isPain = flags.indexOf('pain') !== -1;
+    const fill = isPain
       ? 'var(--pain)'
       : flags.length > 0 ? 'var(--warn)' : 'var(--accent)';
-    const label = esc(node.path) + ' - Ca* ' + num(node.caStar) +
-      ', LOC ' + num(node.loc) + ', Ce ' + num(node.ce);
+    const tip = esc(node.path) + ' - Ca* ' + num(node.caStar) +
+      ', LOC ' + num(node.loc) + ', Ce ' + num(node.ce) +
+      (flags.length > 0 ? ' - ' + flags.join(', ') : '');
     parts.push(
       '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + radius.toFixed(1) +
       '" fill="' + fill + '" fill-opacity="0.7" stroke="var(--bg)" stroke-width="0.5" data-path="' +
-      esc(node.path) + '"><title>' + label + '</title></circle>'
+      esc(node.path) + '"><title>' + tip + '</title></circle>'
     );
+    if (flags.length > 1) {
+      parts.push('<circle class="smell" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) +
+        '" r="' + (radius + 2.6).toFixed(1) + '"/>');
+    }
+  }
+
+  const boxes = [];
+  for (const item of drawn) {
+    if ((item.node.detectors || []).indexOf('pain') === -1) continue;
+    const name = String(item.node.path).split('/').pop();
+    const width = name.length * 5.1;
+    const spot = labelSpot(item, width, drawn, boxes);
+    if (spot === null) continue;
+    boxes.push(spot);
+    parts.push(label('point-label', spot.x, spot.y, spot.anchor, name));
   }
 
   svg.innerHTML = parts.join('');

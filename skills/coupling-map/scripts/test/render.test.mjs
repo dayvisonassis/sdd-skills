@@ -159,7 +159,17 @@ function evaluate(html, options = {}) {
   }
 }
 
-const circles = markup => [...markup.matchAll(/<circle\b[^>]*>/g)].map(match => match[0])
+// A "smell" is a second <circle> drawn over a node that tripped more than one
+// detector. Anything counting nodes has to exclude it, or the count silently
+// depends on how many detectors the fixture happens to carry. It is NOT the
+// overlay's "ring", which marks the node under the cursor - two concepts, two
+// class names, learned the hard way.
+const allCircles = markup => [...markup.matchAll(/<circle\b[^>]*>/g)].map(match => match[0])
+const circles = markup => allCircles(markup).filter(tag => tag.indexOf('class="smell"') === -1)
+const smells = markup => allCircles(markup).filter(tag => tag.indexOf('class="smell"') !== -1)
+const texts = (markup, className) =>
+  [...markup.matchAll(new RegExp('<text class="' + className + '"[^>]*>([^<]*)</text>', 'g'))]
+    .map(match => match[1])
 
 const attribute = (tag, name) => {
   const match = tag.match(new RegExp(name + '="([^"]*)"'))
@@ -852,4 +862,76 @@ test('an empty card does not push the help down', () => {
   // the rule cannot be observed here. It exists so that moving the card cannot
   // silently shift the opening view of a report nobody has clicked yet.
   assert.match(renderHtml(REPORT), /#card:empty \+ h3 \{ margin-top: 0; \}/)
+})
+
+
+// The chart had no visual grammar: circles in an empty space, with every
+// judgement of good-or-bad delegated to the table underneath. These pin the
+// background that answers it, drawn from the same cuts that colour the points
+// so the two can never disagree.
+const CUTS = { painCaStar: 15, painLoc: 400 }
+
+const ZONED = {
+  ...REPORT,
+  meta: { ...REPORT.meta, cuts: CUTS },
+  files: [
+    { path: 'pain/big.ts', app: 'x', domain: 'p', layer: 'service', loc: 900, ce: 2, ca: 20, ceStar: 3, caStar: 40, i: 0.1, dependsOn: [], dependedOnBy: [], detectors: ['pain'] },
+    { path: 'pain/also-cyclic.ts', app: 'x', domain: 'p', layer: 'service', loc: 800, ce: 2, ca: 20, ceStar: 3, caStar: 30, i: 0.1, dependsOn: [], dependedOnBy: [], detectors: ['pain', 'cycle'] },
+    { path: 'safe/tiny.ts', app: 'x', domain: 's', layer: 'model', loc: 20, ce: 0, ca: 90, ceStar: 0, caStar: 300, i: 0, dependsOn: [], dependedOnBy: [], detectors: [] },
+  ],
+  detectors: { ...REPORT.detectors, pain: ['pain/big.ts', 'pain/also-cyclic.ts'] },
+}
+
+const zoned = () => {
+  const harness = evaluate(renderHtml(ZONED), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  return harness
+}
+
+test('the chart carries its zones, not just axes and dots', () => {
+  const chart = zoned().chart()
+  for (const zone of ['zone-pain', 'zone-debt', 'zone-ok']) {
+    assert.equal(chart.indexOf('class="' + zone + '"') !== -1, true, zone + ' missing')
+  }
+  assert.deepEqual(texts(chart, 'zone-label on-pain'), ['ZONA DE DOR'])
+  assert.deepEqual(texts(chart, 'zone-label on-ok'), ['FUNDACAO SAUDAVEL'])
+})
+
+test('the zone boundaries are the detector cuts, printed as numbers', () => {
+  // Background and dot colour come from the same two numbers, so they cannot
+  // contradict each other - and the reader can see which numbers they are.
+  const chart = zoned().chart()
+  assert.equal([...chart.matchAll(/class="cut"/g)].length, 2)
+  assert.deepEqual(texts(chart, 'cut-value'), ['Ca* 15', 'LOC 400'])
+})
+
+test('a second detector earns a smell ring, a single one does not', () => {
+  const chart = zoned().chart()
+  assert.equal(circles(chart).length, 3)
+  assert.equal(smells(chart).length, 1)
+})
+
+test('files in the queue are named on the chart, others are not', () => {
+  const named = texts(zoned().chart(), 'point-label')
+  assert.equal(named.indexOf('big.ts') !== -1, true)
+  assert.equal(named.indexOf('also-cyclic.ts') !== -1, true)
+  assert.equal(named.indexOf('tiny.ts') !== -1, false)
+})
+
+test('a name is dropped rather than printed on top of a point', () => {
+  // Five pain files on nearly the same spot. Overlapping text is unreadable and
+  // reads as a defect, so fewer names is the better failure.
+  const crowded = {
+    ...ZONED,
+    files: [0, 1, 2, 3, 4].map(index => ({
+      path: 'crowd/f' + index + '.ts', app: 'x', domain: 'c', layer: 'service',
+      loc: 900 + index, ce: 2, ca: 20, ceStar: 3, caStar: 40, i: 0.1,
+      dependsOn: [], dependedOnBy: [], detectors: ['pain'],
+    })),
+  }
+  const harness = evaluate(renderHtml(crowded), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  const named = texts(harness.chart(), 'point-label')
+  assert.equal(named.length < 5, true)
+  assert.equal(new Set(named).size, named.length)
 })
