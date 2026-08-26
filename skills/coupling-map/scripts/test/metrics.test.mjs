@@ -35,6 +35,50 @@ test('instability is Ce over Ca plus Ce, and null when both are zero', () => {
   assert.equal(rowFor(r, 'lonely.ts').i, null)
 })
 
+test('a file that depends on nothing but is depended on scores zero, not null', () => {
+  // Zero and null are different positions on the scale and the guard has to be
+  // ca + ce, never ce alone: with ce alone this file would read null and land
+  // among the orphans instead of at the stable end. The other tests pin 0.5 and
+  // null, so nothing else here would notice.
+  const r = computeMetrics(INPUT)
+  const stable = rowFor(r, 'c.ts')
+  assert.equal(stable.ce, 0)
+  assert.equal(stable.ca, 1)
+  assert.equal(stable.i, 0)
+  assert.equal(Object.is(stable.i, null), false)
+})
+
+test('inside a cycle, Ce* of 0 alongside Ce of 1 is the correct answer', () => {
+  // a and b import each other, so a's only dependency is its own component and
+  // its Ce* is genuinely 0 while its Ce is 1. That pair looks arithmetically
+  // impossible from the outside and is not, so it is pinned here: a fallback
+  // like (ceStar || ce) would read as a fix and would silently inflate it.
+  const cyclic = {
+    adj: { 'a.ts': ['b.ts'], 'b.ts': ['a.ts'], 'c.ts': ['a.ts'], 'd.ts': [] },
+    loc: { 'a.ts': 10, 'b.ts': 10, 'c.ts': 10, 'd.ts': 10 },
+    taxonomy: {
+      'a.ts': { app: 'backend', domain: 'ring', layer: null },
+      'b.ts': { app: 'backend', domain: 'ring', layer: null },
+      'c.ts': { app: 'backend', domain: 'caller', layer: null },
+      'd.ts': { app: 'backend', domain: 'caller', layer: null },
+    },
+  }
+  const r = computeMetrics(cyclic)
+  assert.deepEqual(r.files.map(f => f.path), ['a.ts', 'b.ts', 'c.ts', 'd.ts'])
+
+  const a = rowFor(r, 'a.ts')
+  assert.equal(a.ce, 1)
+  assert.equal(a.ceStar, 0)
+  assert.equal(a.ca, 2)
+  assert.equal(a.caStar, 1)
+  assert.equal(rowFor(r, 'c.ts').ceStar, 2)
+
+  // Acceptance criterion 2, checked here rather than only against real output:
+  // both sums count the same reachable pairs from opposite ends.
+  const sum = key => r.files.reduce((total, f) => total + f[key], 0)
+  assert.equal(sum('caStar'), sum('ceStar'))
+})
+
 test('the neighbour lists are carried through for the report card', () => {
   const r = computeMetrics(INPUT)
   assert.deepEqual(rowFor(r, 'b.ts').dependsOn, ['c.ts'])
