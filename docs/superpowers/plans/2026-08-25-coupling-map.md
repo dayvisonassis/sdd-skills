@@ -779,7 +779,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 > different position from `i === null` (27 real backend files sit at exactly 0, 8 at null — a
 > guard written as `ce === 0` passes all seven tests and turns those 27 into orphans); and
 > `ce > 0` with `ceStar === 0` is **correct**, not impossible, when every direct target sits in
-> the node's own component. Ten tests, not seven.
+> the node's own component. Eleven tests, not seven.
 
 **Files:**
 - Create: `skills/coupling-map/scripts/coupling-map/metrics.mjs`
@@ -941,7 +941,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/metrics.test.mjs"
 ```
 
-Expected: `# pass 10`, `# fail 0`.
+Expected: `# pass 11`, `# fail 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1207,7 +1207,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 39 passing, 0 failing.
+Expected: 40 passing, 0 failing.
 
 - [ ] **Step 6: Commit**
 
@@ -2045,7 +2045,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 48 passing, 0 failing.
+Expected: 49 passing, 0 failing.
 
 - [ ] **Step 5: Verify in the browser, dark theme first**
 
@@ -2212,7 +2212,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 48 passing, 0 failing.
+Expected: 49 passing, 0 failing.
 
 - [ ] **Step 3: Confirm the target project is left clean**
 
