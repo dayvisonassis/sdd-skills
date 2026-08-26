@@ -499,11 +499,11 @@ const WITH_BUCKET = {
   ...REPORT,
   files: [
     ...REPORT.files,
-    { path: 'environments/environment.ts', app: 'frontend', domain: '(sem dominio)', layer: null, loc: 11, ce: 0, ca: 5, ceStar: 0, caStar: 425, i: 0, dependsOn: [], dependedOnBy: ['a.ts'], detectors: [] },
+    { path: 'environments/environment.ts', app: 'frontend', domain: '(sem domínio)', layer: null, loc: 11, ce: 0, ca: 5, ceStar: 0, caStar: 425, i: 0, dependsOn: [], dependedOnBy: ['a.ts'], detectors: [] },
   ],
   domains: [
     ...REPORT.domains,
-    { domain: '(sem dominio)', apps: ['frontend'], files: 1, loc: 2501, ce: 0, ca: 5, caStar: 425, ceStar: 0 },
+    { domain: '(sem domínio)', apps: ['frontend'], files: 1, loc: 2501, ce: 0, ca: 5, caStar: 425, ceStar: 0 },
   ],
 }
 
@@ -517,8 +517,8 @@ test('the report opens on files, not on the domain overview', () => {
 test('the unclassified bucket is never drawn or listed as a domain', () => {
   const harness = evaluate(renderHtml(WITH_BUCKET), { unit: 'domain', topn: '0' })
   harness.api.refresh()
-  assert.equal(harness.chart().includes('(sem dominio)'), false)
-  assert.equal(harness.body().includes('(sem dominio)'), false)
+  assert.equal(harness.chart().includes('(sem domínio)'), false)
+  assert.equal(harness.body().includes('(sem domínio)'), false)
   assert.equal(circles(harness.chart()).length, REPORT.domains.length)
 })
 
@@ -696,7 +696,7 @@ test('the excluded bucket is not resurrected as a domain neighbour', () => {
   harness.api.refresh()
   assert.deepEqual([...harness.api.neighbourhood('alpha', Infinity).out], ['beta'])
   harness.point('alpha').onmouseenter()
-  assert.equal(harness.overlay().includes('(sem dominio)'), false)
+  assert.equal(harness.overlay().includes('(sem domínio)'), false)
 })
 
 test('a file inside the bucket is still reachable in the file view', () => {
@@ -907,7 +907,7 @@ test('the chart carries its zones, not just axes and dots', () => {
     assert.equal(chart.indexOf('class="' + zone + '"') !== -1, true, zone + ' missing')
   }
   assert.deepEqual(texts(chart, 'zone-label on-pain'), ['ZONA DE DOR'])
-  assert.deepEqual(texts(chart, 'zone-label on-ok'), ['FUNDACAO SAUDAVEL'])
+  assert.deepEqual(texts(chart, 'zone-label on-ok'), ['FUNDAÇÃO SAUDÁVEL'])
 })
 
 test('the zone boundaries are the detector cuts, printed as numbers', () => {
@@ -944,8 +944,8 @@ test('hovering a point names it and says which zone it is in', () => {
 test('the zone in the tag follows the cuts, corner by corner', () => {
   const corners = [
     { path: 'q/pain.ts', loc: 900, caStar: 40, zone: 'ZONA DE DOR' },
-    { path: 'q/debt.ts', loc: 900, caStar: 2, zone: 'divida contida' },
-    { path: 'q/base.ts', loc: 20, caStar: 40, zone: 'fundacao saudavel' },
+    { path: 'q/debt.ts', loc: 900, caStar: 2, zone: 'dívida contida' },
+    { path: 'q/base.ts', loc: 20, caStar: 40, zone: 'fundação saudável' },
     { path: 'q/quiet.ts', loc: 20, caStar: 2, zone: 'baixo risco' },
   ]
   const report = {
@@ -1042,11 +1042,11 @@ test('every mark the chart draws is explained in the sidebar', () => {
   const sidebar = html.slice(html.indexOf('Como ler'), html.indexOf('<script>'))
   const explained = [
     'Ca*', 'LOC', 'Ce*', 'Ce', 'Ca',
-    'raio de explosao', 'Tamanho do ponto',
+    'raio de explosão', 'Tamanho do ponto',
     'anel',
-    'amplificador', 'controller como dependencia', 'ciclo',
-    'violacao de direcao', 'orfao',
-    'logaritmicos',
+    'amplificador', 'controller como dependência', 'ciclo',
+    'violação de direção', 'órfão',
+    'logarítmicos',
   ]
   for (const term of explained) {
     assert.equal(sidebar.indexOf(term) !== -1, true, term + ' is drawn but never explained')
@@ -1082,7 +1082,7 @@ test('the card names a detector in words, never by its internal key', () => {
   harness.api.refresh()
   harness.point('pain/also-cyclic.ts').onclick()
   const card = harness.card()
-  assert.equal(card.indexOf('na fila de refatoracao') !== -1, true)
+  assert.equal(card.indexOf('na fila de refatoração') !== -1, true)
   assert.equal(card.indexOf('ciclo') !== -1, true)
   assert.equal(/pain/.test(card.replace(/class="[^"]*"/g, '')), false)
   assert.equal(card.indexOf('leafAsDependency') !== -1, false)
@@ -1099,7 +1099,25 @@ test('the words the card uses are the words the sidebar defines', () => {
   const names = [...source.matchAll(/'([^']+)',/g)].map(match => match[1])
   assert.equal(names.length >= 5, true)
   for (const name of names) {
-    if (name === 'na fila de refatoracao') continue
+    if (name === 'na fila de refatoração') continue
     assert.equal(sidebar.indexOf(name) !== -1, true, name + ' is shown but never defined')
+  }
+})
+
+
+test('the copy is written in Portuguese, not in identifier-speak', () => {
+  // The whole guide was first written without accents, as if it were code. The
+  // project rule about dropping accents applies to commit messages; text on a
+  // screen is read by a person.
+  const html = renderHtml(ZONED)
+  const unaccented = [
+    'refatoracao', 'explosao', 'dependencia', 'modulos', 'codigo', 'exposicao',
+    'decisoes', 'logaritmicos', 'dominio', 'orfao', 'violacao', 'direcao',
+    'beneficio', 'voce', 'ligacoes', 'ligacao', 'posicao', 'grafico',
+    'fundacao', 'saudavel', 'utilitario', 'ilegiveis', 'aplicacoes',
+    'repositorio', 'unica', 'divida', 'relatorio', 'atraves', 'ninguem',
+  ]
+  for (const word of unaccented) {
+    assert.equal(html.indexOf(word) === -1, true, word + ' is missing its accent')
   }
 })

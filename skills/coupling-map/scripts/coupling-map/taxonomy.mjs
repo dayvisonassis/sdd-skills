@@ -1,4 +1,4 @@
-const NO_DOMAIN = '(sem dominio)'
+const NO_DOMAIN = '(sem domínio)'
 
 function suffixLayer(fileName, layers) {
   const parts = fileName.split('.')

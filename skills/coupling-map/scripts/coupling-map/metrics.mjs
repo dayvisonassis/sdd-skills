@@ -11,7 +11,7 @@ export function computeMetrics({ adj, loc, taxonomy }) {
     const dependedOnBy = (rev[path] || []).slice().sort()
     const ce = dependsOn.length
     const ca = dependedOnBy.length
-    const tax = taxonomy[path] || { app: null, domain: '(sem dominio)', layer: null }
+    const tax = taxonomy[path] || { app: null, domain: '(sem domínio)', layer: null }
     return {
       path,
       app: tax.app,

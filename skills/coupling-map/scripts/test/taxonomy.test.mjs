@@ -66,7 +66,7 @@ test('backend: middleware keeps its own domain', () => {
 test('anything unclassifiable lands in the visible bucket, never dropped', () => {
   assert.deepEqual(
     classify('something/else/weird.js', BACKEND),
-    { app: 'backend', domain: '(sem dominio)', layer: null }
+    { app: 'backend', domain: '(sem domínio)', layer: null }
   )
 })
 
@@ -110,6 +110,6 @@ test('a derivable layer survives an underivable domain', () => {
   // layer feeds the colour axis and the direction detector.
   assert.deepEqual(
     classify('shared/foo.component.ts', FRONTEND),
-    { app: 'frontend', domain: '(sem dominio)', layer: 'component' }
+    { app: 'frontend', domain: '(sem domínio)', layer: 'component' }
   )
 })

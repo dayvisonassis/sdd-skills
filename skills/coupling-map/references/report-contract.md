@@ -27,7 +27,7 @@ measured.
    broken". The CLI prints this sum on every run and labels it `OK` or `BROKEN`. On the PABX
    monorepo both sides are 15987.
 4. **Every file has a `domain` string.** There is no `null` domain and no missing one: a file whose
-   domain cannot be derived is placed in the visible bucket `(sem dominio)` and counted in
+   domain cannot be derived is placed in the visible bucket `(sem domínio)` and counted in
    `totals.unclassified`. Unclassifiable is a reported state, never an absent one.
 5. **Paths are repo-relative, POSIX-separated, and normalised.** No drive letter, no backslash, no
    `../` survives. `madge` follows imports out of the configured root and returns
@@ -53,7 +53,7 @@ measured.
     "edges": 3139,                // resolved import edges
     "declared": 3161,             // internal imports counted in the source text
     "coveragePct": 99.3,          // 100 * edges / declared, one decimal
-    "unclassified": 28,           // files whose domain is "(sem dominio)"
+    "unclassified": 28,           // files whose domain is "(sem domínio)"
     "unreadable": 0,              // files madge listed that could not be read; loc counted as 0
     "coverageByApp": [
       { "name": "frontend", "files": 679, "edges": 2468, "declared": 2469, "unreadable": 0, "coveragePct": 100.0 },
@@ -84,7 +84,7 @@ say which app to fix.
 |---|---|---|
 | `path` | string | Repo-relative, POSIX separators. The identity of the node. |
 | `app` | string \| null | App name from the config. `null` for a node no app claimed. |
-| `domain` | string | Never null. `(sem dominio)` for the visible bucket. |
+| `domain` | string | Never null. `(sem domínio)` for the visible bucket. |
 | `layer` | string \| null | `null` when the file matches no name in the app's `layers`. |
 | `loc` | number | `source.split('\n').length`. A newline-terminated file therefore counts one more than `wc -l` reports; the measure is comparative and the convention is stable across runs. `0` means the file could not be read. |
 | `ce` | number | Efferent coupling: direct imports out. `dependsOn.length`. |
@@ -105,7 +105,7 @@ and the cycle is reported by its own detector. This is why `audit.model.js` and
 
 | Field | Type | Meaning |
 |---|---|---|
-| `domain` | string | Domain name, `(sem dominio)` included. |
+| `domain` | string | Domain name, `(sem domínio)` included. |
 | `apps` | string[] | Sorted, deduplicated, nulls dropped. More than one entry means the domain spans apps. |
 | `files` | number | Count of files. |
 | `loc`, `ce`, `ca` | number | **Sums** over the domain's files. |

@@ -5,7 +5,7 @@ import { classify } from './taxonomy.mjs'
 import { countDeclared } from './declared.mjs'
 
 const BACKSLASH = String.fromCharCode(92)
-const NO_DOMAIN = '(sem dominio)'
+const NO_DOMAIN = '(sem domínio)'
 
 function readSource(absolute) {
   try {

@@ -94,7 +94,7 @@ test('a node that is only ever a target still gets a row', () => {
   assert.equal(b.ca, 1)
   assert.equal(b.ce, 0)
   assert.equal(b.loc, 0)
-  assert.equal(b.domain, '(sem dominio)')
+  assert.equal(b.domain, '(sem domínio)')
 
   const sum = k => r.files.reduce((acc, f) => acc + f[k], 0)
   assert.equal(sum('caStar'), sum('ceStar'))

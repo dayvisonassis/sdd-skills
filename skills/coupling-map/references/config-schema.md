@@ -39,14 +39,14 @@ Two rules govern every field below.
 | `layerFrom` | `"suffix"` \| `"folder"` | yes | How the layer is derived. |
 | `layers` | array of strings | yes | The closed vocabulary of layer names. Anything not on the list yields `layer: null`. |
 | `layerOrder` | array of strings | yes | The permitted direction of dependency, from outermost to innermost. An edge that points from a lower index to a higher one is a direction violation. Layers absent from this list are never judged. |
-| `requireLayerForDomain` | boolean | no (default `false`) | When true, a file with no layer gets no domain either: it goes to the `(sem dominio)` bucket instead of inventing one. |
+| `requireLayerForDomain` | boolean | no (default `false`) | When true, a file with no layer gets no domain either: it goes to the `(sem domínio)` bucket instead of inventing one. |
 
 ### `domainFrom`
 
 - **`firstFolderUnder`** — the domain is the folder immediately below `domainBase`. For
   `app/agent-dashboard/webphone/webphone.component.ts` with `domainBase: "app"`, the domain is
   `agent-dashboard`. A file sitting directly in `domainBase` uses its own basename, stripped of
-  the layer suffix. A file with no `domainBase` segment at all goes to `(sem dominio)`.
+  the layer suffix. A file with no `domainBase` segment at all goes to `(sem domínio)`.
 - **`basename`** — the domain is the file's own name with the layer suffix removed:
   `models/user.model.js` is domain `user`. This is what fits a backend organised
   layer-first (`controllers/`, `models/`, `routes/`), where the folder names the layer and the
@@ -82,7 +82,7 @@ On a layer-first backend, `domainFrom: "basename"` applied to a file that lives 
 layer folder manufactures a domain out of nothing: `database.js`, `knexfile.js`, `ami.js` and
 `api/v2/index.js` would become four single-file domains, and `index` would appear on the chart as
 if it were a feature. Those files are infrastructure. `requireLayerForDomain: true` sends them to
-the visible `(sem dominio)` bucket, where they are counted and reported rather than disguised.
+the visible `(sem domínio)` bucket, where they are counted and reported rather than disguised.
 
 On the frontend the domain comes from the folder, so a file with no layer suffix still has a real
 domain. The flag would only throw information away there.

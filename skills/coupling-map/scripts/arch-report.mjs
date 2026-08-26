@@ -6,7 +6,7 @@ import { detect } from './coupling-map/detect.mjs'
 import { renderHtml } from './coupling-map/render.mjs'
 
 const SCRIPT_VERSION = '1.0.0'
-const NO_DOMAIN = '(sem dominio)'
+const NO_DOMAIN = '(sem domínio)'
 
 function arg(name, fallback) {
   const index = process.argv.indexOf('--' + name)
