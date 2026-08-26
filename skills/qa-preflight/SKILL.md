@@ -8,9 +8,16 @@ description: The gate between a finished feature and the human QA. Investigates 
 A gate, not a plan generator. A plan generator moves work onto the human; this **removes**
 work from the human and uses what remains as the definition of what actually needs a person.
 
-> Base doc: `../../docs/Skill_QA_Preflight.md` (rationale and the decisions behind each rule).
-> References, loaded on demand: `references/qa-practices.md` (how cases are derived),
-> `references/report-template.md` (the exact output skeletons).
+> References, loaded on demand: `references/qa-practices.md` (how cases are derived) and
+> `references/report-template.md` (the exact output skeletons). Both travel with this skill,
+> so both resolve wherever it is installed.
+>
+> The rationale — why each rule exists and what this skill deliberately does NOT do — is in
+> `docs/Skill_QA_Preflight.md` of the **sdd-skills** repository, which is where the skill is
+> maintained. **That file is not part of an installed copy**, and the relative path this note
+> used to give (`../../docs/`) resolved to nothing outside the source repository. Everything
+> needed to RUN the skill is in the folder you are reading; go to the rationale only to change
+> a rule, and change it there.
 
 **Standalone by decision.** No other skill invokes this one. It runs when the feature is
 **done**, on explicit human request. Running it mid-implementation produces noise about code
