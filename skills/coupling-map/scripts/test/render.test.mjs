@@ -830,3 +830,26 @@ test('the overlay group is emitted inside the chart, under the points', () => {
   assert.notEqual(group, -1)
   assert.equal(group < harness.chart().indexOf('<circle'), true)
 })
+
+function sidebarOf(html) {
+  const start = html.indexOf('class="panel sidebar"')
+  return html.slice(start, html.indexOf('<script>', start))
+}
+
+test('the detail card sits above the static help, not after it', () => {
+  // Clicking a point produces exactly one thing: the card. Against the real
+  // report the help text, the legend and the eleven-row stats list add up to
+  // more than a viewport, so a card appended after them opened at y=929 on a
+  // 900px page - zero pixels of it visible. The click appeared to do nothing.
+  const sidebar = sidebarOf(renderHtml(REPORT))
+  const card = sidebar.indexOf('id="card"')
+  assert.notEqual(card, -1)
+  assert.equal(card < sidebar.indexOf('Como ler'), true)
+})
+
+test('an empty card does not push the help down', () => {
+  // Marker guard, not a behavioural test: without a layout engine the effect of
+  // the rule cannot be observed here. It exists so that moving the card cannot
+  // silently shift the opening view of a report nobody has clicked yet.
+  assert.match(renderHtml(REPORT), /#card:empty \+ h3 \{ margin-top: 0; \}/)
+})

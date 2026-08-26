@@ -100,6 +100,9 @@ circle { cursor: pointer; }
 h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--muted); margin: 16px 0 6px; }
 h3:first-child { margin-top: 0; }
+#card:empty + h3 { margin-top: 0; }
+#card:not(:empty) { border-bottom: 1px solid var(--line);
+  padding-bottom: 10px; margin-bottom: 4px; }
 .sidebar p { margin: 0 0 8px; }
 .legend { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px;
@@ -145,6 +148,7 @@ export function renderHtml(report) {
     </div>
   </div>
   <div class="panel sidebar">
+    <div id="card"></div>
     <h3>Como ler</h3>
     <p>Eixo X: <b>Ca*</b>, quantos modulos quebram se este quebrar. Eixo Y: <b>LOC</b>.
     Tamanho do ponto: <b>Ce</b>. Os dois eixos sao logaritmicos.</p>
@@ -168,7 +172,6 @@ export function renderHtml(report) {
     <h3>Este relatorio</h3>
     <ul class="stats">${statsMarkup(report)}</ul>
     <p class="provenance">${provenance(report)}</p>
-    <div id="card"></div>
   </div>
 </div>
 <script>
