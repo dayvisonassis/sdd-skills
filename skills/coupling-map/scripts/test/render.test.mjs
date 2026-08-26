@@ -103,10 +103,73 @@ test('the page exposes draw(nodes), never a draw-everything entry point', () => 
   assert.match(html, /function draw\s*\(\s*nodes\s*\)/)
 })
 
-test('the table opens on the refactoring queue: caStar down, ceStar up', () => {
-  const html = renderHtml(REPORT)
-  assert.match(html, /caStar/)
-  assert.match(html, /ceStar/)
+test('the queue opens on what to refactor, not on the foundation under it', () => {
+  // The real pair off this monorepo. Ordering by blast radius alone puts
+  // toast.service.ts first - 44 lines, depended on by everything, the file the
+  // sidebar labels "fundacao saudavel: nao tocar" - and buries the 1416-line
+  // middleware that is actually in the pain zone. This test failing is the
+  // report telling someone to go and refactor toast.service.ts.
+  const report = structuredClone(REPORT)
+  report.files = [
+    {
+      path: 'apps/frontend/src/app/toast/toast.service.ts',
+      app: 'frontend', domain: 'toast', layer: 'service',
+      loc: 44, ce: 2, ca: 65, ceStar: 2, caStar: 409, i: 0.03,
+      dependsOn: [], dependedOnBy: [], detectors: [],
+    },
+    {
+      path: 'apps/backend/src/middleware/authorization.middleware.js',
+      app: 'backend', domain: 'authorization', layer: 'middleware',
+      loc: 1416, ce: 9, ca: 93, ceStar: 40, caStar: 100, i: 0.09,
+      dependsOn: [], dependedOnBy: [], detectors: ['pain'],
+    },
+  ]
+  const harness = evaluate(renderHtml(report), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  assert.deepEqual(harness.api.sorted().map(row => row.path), [
+    'apps/backend/src/middleware/authorization.middleware.js',
+    'apps/frontend/src/app/toast/toast.service.ts',
+  ])
+})
+
+test('the opening order is detected first, then caStar down and ceStar up', () => {
+  const report = structuredClone(REPORT)
+  const row = (path, over) => ({
+    path, app: 'a', domain: 'd', layer: null, loc: 10, ce: 0, ca: 0,
+    ceStar: 0, caStar: 0, i: null, dependsOn: [], dependedOnBy: [],
+    detectors: [], ...over,
+  })
+  report.files = [
+    row('healthy-huge-radius.ts', { caStar: 400 }),
+    row('leaf.ts', { caStar: 5, detectors: ['leafAsDependency'] }),
+    row('amp.ts', { caStar: 5, detectors: ['amplifier'] }),
+    row('pain-small.ts', { caStar: 16, detectors: ['pain'] }),
+    row('pain-hard.ts', { caStar: 90, ceStar: 7, detectors: ['pain'] }),
+    row('pain-easy.ts', { caStar: 90, ceStar: 1, detectors: ['pain'] }),
+  ]
+  const harness = evaluate(renderHtml(report), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  assert.deepEqual(harness.api.sorted().map(r => r.path), [
+    'pain-easy.ts',
+    'pain-hard.ts',
+    'pain-small.ts',
+    'amp.ts',
+    'leaf.ts',
+    'healthy-huge-radius.ts',
+  ])
+})
+
+test('clicking a header abandons the tier and sorts on that one key', () => {
+  const report = structuredClone(REPORT)
+  report.files = [
+    { ...REPORT.files[0], path: 'plain.ts', caStar: 400, detectors: [] },
+    { ...REPORT.files[1], path: 'painful.ts', caStar: 10, detectors: ['pain'] },
+  ]
+  const harness = evaluate(renderHtml(report), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  assert.deepEqual(harness.api.sorted().map(r => r.path), ['painful.ts', 'plain.ts'])
+  harness.head().querySelectorAll('th').find(th => th.dataset.key === 'caStar').onclick()
+  assert.deepEqual(harness.api.sorted().map(r => r.path), ['plain.ts', 'painful.ts'])
 })
 
 test('embedded JSON survives a path containing a closing script tag', () => {

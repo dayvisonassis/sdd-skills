@@ -164,9 +164,11 @@ const DOMAIN_COLUMNS = ['domain', 'apps', 'files', 'loc', 'ce', 'ca', 'caStar', 
 const NICE = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000];
 const PLOT = { left: 60, right: 690, top: 30, bottom: 410, width: 630, height: 380 };
 const TICK_GAP = 26;
+const TIERS = ['pain', 'amplifier', 'leafAsDependency'];
 
 let sortKey = 'caStar';
 let sortDir = -1;
+let tiered = true;
 let domainRows = null;
 
 function unit() {
@@ -234,8 +236,23 @@ function compare(a, b) {
   return sortDir === -1 ? -primary : primary;
 }
 
+function tier(node) {
+  const flags = node.detectors || [];
+  for (let index = 0; index < TIERS.length; index++) {
+    if (flags.indexOf(TIERS[index]) !== -1) return index;
+  }
+  return TIERS.length;
+}
+
+function queueCompare(a, b) {
+  const byTier = tier(a) - tier(b);
+  if (byTier !== 0) return byTier;
+  const byCaStar = num(b.caStar) - num(a.caStar);
+  return byCaStar !== 0 ? byCaStar : tiebreak(a, b);
+}
+
 function sorted() {
-  return rows().slice().sort(compare);
+  return rows().slice().sort(tiered ? queueCompare : compare);
 }
 
 function visible() {
@@ -316,7 +333,8 @@ function draw(nodes) {
 
   svg.innerHTML = parts.join('');
   document.getElementById('summary').textContent =
-    nodes.length + ' de ' + all.length + ' - ordenado por ' + sortKey;
+    nodes.length + ' de ' + all.length + ' - ' +
+    (tiered ? 'fila: detectados primeiro, depois caStar' : 'ordenado por ' + sortKey);
 }
 
 function cell(node, key) {
@@ -348,8 +366,9 @@ function table(nodes) {
   for (const th of head.querySelectorAll('th')) {
     th.onclick = function () {
       const key = th.dataset.key;
-      sortDir = key === sortKey ? -sortDir : -1;
+      sortDir = key === sortKey && !tiered ? -sortDir : -1;
       sortKey = key;
+      tiered = false;
       refresh();
     };
   }
