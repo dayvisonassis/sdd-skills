@@ -212,6 +212,10 @@ sonda — apaga essa aresta e transforma o arquivo em orfao. Os 23 foram medidos
 exclusao existir. O total de nos segue 959, porque `package.json` so aparecia como alvo, nunca
 como chave.
 
+**Arestas do backend: 671, nao 674.** Mesma causa: a tabela de cobertura la em cima foi medida
+antes da exclusao `\.json$` que esta propria sonda introduziu. A cobertura do backend passa de
+110,0% para 109,5%, bem acima do piso de 85% nos dois casos.
+
 **`Ca*` de `audit.model.js` e `authorization.middleware.js`: 100, nao 101.** Os dois se importam
 mutuamente — sao um dos dois ciclos do repositorio. O `transitiveCounts` exclui de proposito os
 demais membros do proprio componente (secao 4.1 do documento de design: quem ja esta acoplado
