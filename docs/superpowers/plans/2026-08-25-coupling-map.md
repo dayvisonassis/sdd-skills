@@ -272,7 +272,20 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 2: Taxonomy — path to domain and layer
+### Task 2: Taxonomy — path to domain and layer — DONE, with one correction
+
+> **A review during implementation found a real defect in the code below: `layerFrom` was
+> declared, documented and shipped, but never read.** `classify` branched only on `domainFrom`
+> and the layer strategy rode along with it — `firstFolderUnder` implied suffix, `basename`
+> implied folder. This repository uses exactly those two canonical pairings, so neither the
+> implementation nor the tests exposed it. Since the skill generates config for arbitrary
+> projects, a common layout like `src/<domain>/services/x.js` would have produced `layer: null`
+> for every file, silently disabling the direction-violation detector.
+>
+> The interface below is the corrected one. Three independent decisions, all read:
+> `domainFrom`, `layerFrom`, and a new `requireLayerForDomain` that turns the backend's
+> domain-follows-layer behaviour from an accident of branch order into a declared option.
+> Ten tests, not seven — the three added are the ones whose absence let it through.
 
 **Files:**
 - Create: `skills/coupling-map/scripts/coupling-map/taxonomy.mjs`
@@ -284,7 +297,14 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
   `domain` is `'(sem dominio)'` when nothing matches; `layer` is `null` when no known suffix or
   folder matches. Consumed by Task 4 and Task 5.
 - `appConfig` is one entry of `config.apps`, shaped:
-  `{ name, root, lang, domainFrom: 'firstFolderUnder'|'basename', domainBase?, layerFrom: 'suffix'|'folder', layers: string[], layerOrder: string[], extensions: string[], exclude: string[], tsConfig?: string }`
+  `{ name, root, domainFrom: 'firstFolderUnder'|'basename', domainBase?, layerFrom: 'suffix'|'folder', requireLayerForDomain?: boolean, layers: string[], layerOrder: string[], extensions: string[], exclude: string[], tsConfig?: string }`
+- Resolution order inside `classify`:
+  1. layer — `layerFrom === 'suffix'` uses the suffix, `'folder'` scans the folder chain
+  2. domain — `requireLayerForDomain` with a null layer gives the bucket; otherwise
+     `firstFolderUnder` takes the folder after `domainBase` (or the basename when the file sits
+     directly under it), and `basename` takes the basename
+- `requireLayerForDomain` is `true` for the backend and absent (false) for the frontend. See
+  section 5 of the design doc for why the backend's 17 bucketed files are the right answer.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1385,6 +1405,7 @@ in the exclude patterns, which was hit during the probe.
       "exclude": ["node_modules", "__tests__", "/docs/", "\\.json$"],
       "domainFrom": "basename",
       "layerFrom": "folder",
+      "requireLayerForDomain": true,
       "layers": ["routes", "controllers", "models", "services", "middleware", "functions", "utils", "config", "jobs", "socket"],
       "layerOrder": ["routes", "controllers", "models"]
     }
@@ -1410,6 +1431,11 @@ not be "tidied":
   `breadcrumbs.component.ts` (Ca 69) and three other correctly-reused shared components.
 - **`painCaStar` is 15, not 20.** At 20 the queue drops `reports.controller.js` (2027 lines),
   `reports-agent.model.js` (2254) and `agents.model.js` (1794).
+- **`requireLayerForDomain` is true on the backend and absent on the frontend.** It sends the 17
+  backend files outside any layer folder — `ami.js`, `database.js`, `knexfile.js`,
+  `api/v2/index.js` — to the visible bucket. They are infrastructure, not domains; promoting
+  them by basename would manufacture 17 single-file domains and put `index` on the chart as if
+  it were a feature.
 
 - [ ] **Step 4: Run it end to end**
 

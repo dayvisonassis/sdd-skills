@@ -132,18 +132,43 @@ coisas — e o perfil "orquestrador".
 
 Dominio e camada derivados do caminho e do nome do arquivo. Sem arquivo de mapeamento manual.
 
-**Frontend**
+Sao **tres decisoes independentes** por app, declaradas em `arch.config.json`:
+
+| Campo | Valores | Decide |
+|---|---|---|
+| `domainFrom` | `firstFolderUnder` \| `basename` | o dominio |
+| `layerFrom` | `suffix` \| `folder` | a camada |
+| `requireLayerForDomain` | booleano, padrao `false` | se um arquivo sem camada reconhecida perde tambem o dominio |
+
+A independencia entre as duas primeiras **nao e teorica**. A primeira versao ramificava so em
+`domainFrom` e a estrategia de camada pegava carona nele — `firstFolderUnder` implicava sufixo,
+`basename` implicava pasta. Como este repositorio usa exatamente os dois pareamentos canonicos,
+nem o codigo nem os testes expunham o defeito. Mas a secao 10 faz a IA **gerar a config em
+qualquer projeto**, e uma arvore no formato `src/<dominio>/services/x.js` e comum: a config
+gerada a descreveria corretamente, `layerFrom` seria ignorado, e **toda camada voltaria `null`**
+— desabilitando em silencio o detector de violacao de direcao e esvaziando o eixo de cor do
+relatorio. Achado por revisao independente durante a implementacao.
+
+**Frontend** — `firstFolderUnder` sob `app`, `suffix`, `requireLayerForDomain: false`
 
 - dominio = primeira pasta sob `apps/frontend/src/app/` (76 delas)
 - camada = sufixo do arquivo: `component`, `service`, `model`, `module`, `guard`,
   `interceptor`, `directive`, `pipe`, `resolver`, `helpers`
+- sufixo desconhecido mantem o dominio: `app/reports/reports.routes.ts` -> dominio `reports`,
+  camada `null`
 
-**Backend**
+**Backend** — `basename`, `folder`, `requireLayerForDomain: **true**`
 
 - dominio = basename sem sufixo (`dialer.model.js` -> `dialer`). 52 dos 59 models tem um
   controller homonimo, entao a chave e estavel
 - camada = pasta sob `apps/backend/src/`: `routes`, `controllers`, `models`, `services`,
   `middleware`, `functions`, `utils`, `config`, `jobs`, `socket`
+- `requireLayerForDomain` e `true` **de proposito**: manda para o balde os 17 arquivos (6,1%)
+  que ficam fora de qualquer pasta de camada — `ami.js`, `database.js`, `knexfile.js`,
+  `api/v2/index.js`, helpers. Sao infraestrutura, nao dominio. Promove-los pelo basename
+  fabricaria 17 dominios de um arquivo so e colocaria `index` e `database` no grafico como se
+  fossem features. O balde e a resposta certa aqui, e agora e uma **opcao declarada** em vez de
+  um efeito colateral da ordem dos ramos.
 
 **Cruzamento full-stack:** 27 dominios existem nos dois lados com o mesmo nome (`dialer`,
 `queues`, `reports`, `permissions`, `sip-group`, `cost-center`, `dashboard`, `csp`,
