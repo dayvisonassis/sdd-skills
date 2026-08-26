@@ -968,7 +968,30 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 5: Detectors
+### Task 5: Detectors — DONE, with five corrections
+
+> The code block below is the version that was written first, deliberately, so the independent
+> checks would produce evidence instead of opinion. Against it, five things were wrong:
+>
+> 1. **`directionViolation` was pushed once per violating edge**, not once per file.
+>    `realtime-agent.model.js` carried the same detector five times; four backend models had
+>    duplicates.
+> 2. **The cycle sort used `localeCompare`** — the exact defect Task 4 had just removed from
+>    `metrics.mjs`, rewritten into this file. Same fix: the plain comparator.
+> 3. **`directionViolations` was the only array not sorted on the way out**, so its order was
+>    madge's filesystem traversal order. Acceptance criterion 8 wants byte-identical runs.
+> 4. **The plan's own tests 8 and 9 failed against the plan's own implementation.** Their
+>    fixtures left `ce`/`ca` at zero on rows whose `adj` gave them neighbours, so the orphan
+>    detector correctly fired and the assertion compared against the wrong list. The fixture
+>    contradicted itself.
+> 5. Seventeen tests, not nine.
+>
+> **Verified end to end against the real repository**, independently of the agent that wrote it:
+> 959 nodes, pain 12, amplifier 1, controller-as-dependency 3, 2 cycles, 14 direction violations
+> (13 of them `models -> controllers`), invariant `Σ Ca* = Σ Ce* = 15987`, two runs identical,
+> and acceptance criterion 5 passing in both directions. Orphans came out 24 against the probe's
+> 23, and the probe was the one that was stale — see the correction appended to
+> `2026-08-25-probe-findings.md`.
 
 **Files:**
 - Create: `skills/coupling-map/scripts/coupling-map/detect.mjs`
@@ -1196,7 +1219,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/detect.test.mjs"
 ```
 
-Expected: `# pass 9`, `# fail 0`. If the pain-zone test fails because the calibrated cuts from
+Expected: `# pass 17`, `# fail 0`. If the pain-zone test fails because the calibrated cuts from
 Task 1 moved, update `CONFIG` in the test to the calibrated values and re-run — the assertions
 about which file trips which detector must still hold.
 
@@ -1207,7 +1230,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 40 passing, 0 failing.
+Expected: 48 passing, 0 failing.
 
 - [ ] **Step 6: Commit**
 
@@ -2045,7 +2068,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 49 passing, 0 failing.
+Expected: 57 passing, 0 failing.
 
 - [ ] **Step 5: Verify in the browser, dark theme first**
 
@@ -2212,7 +2235,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 49 passing, 0 failing.
+Expected: 57 passing, 0 failing.
 
 - [ ] **Step 3: Confirm the target project is left clean**
 
