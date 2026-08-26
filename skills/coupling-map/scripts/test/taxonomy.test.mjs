@@ -102,3 +102,14 @@ test('without requireLayerForDomain an unrecognised layer still keeps its derive
     { app: 'other', domain: 'billing', layer: null }
   )
 })
+
+test('a derivable layer survives an underivable domain', () => {
+  // Layer and domain resolve independently, so failing to place a file in a
+  // domain must not discard the layer we can still read off its name. Nulling
+  // it would reintroduce the coupling this interface exists to remove, and the
+  // layer feeds the colour axis and the direction detector.
+  assert.deepEqual(
+    classify('shared/foo.component.ts', FRONTEND),
+    { app: 'frontend', domain: '(sem dominio)', layer: 'component' }
+  )
+})
