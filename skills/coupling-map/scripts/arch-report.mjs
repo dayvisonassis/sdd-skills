@@ -1,9 +1,10 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import { execSync, spawn } from 'node:child_process'
 import { collect } from './coupling-map/collect.mjs'
 import { computeMetrics } from './coupling-map/metrics.mjs'
 import { detect } from './coupling-map/detect.mjs'
 import { renderHtml } from './coupling-map/render.mjs'
+import { reportPath, reportUrl, openCommand } from './coupling-map/output.mjs'
 
 const SCRIPT_VERSION = '1.0.0'
 const NO_DOMAIN = '(sem domínio)'
@@ -29,7 +30,12 @@ function head() {
 
 const repoRoot = process.cwd()
 const configPath = arg('config', 'arch.config.json')
+function flag(name) {
+  return process.argv.indexOf('--' + name) !== -1
+}
+
 const outDir = arg('out', 'architecture-report')
+const shouldOpen = flag('open')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 
 const { adj, loc, taxonomy, stats } = await collect(config, repoRoot)
@@ -141,4 +147,14 @@ console.log('controllers    ' + detectors.leafAsDependency.length)
 console.log('cycles         ' + detectors.cycles.length)
 console.log('orphans        ' + detectors.orphans.length)
 console.log('direction      ' + detectors.directionViolations.length)
-console.log('written to     ' + outDir + '/index.html')
+console.log('written to     ' + reportUrl(outDir))
+
+if (shouldOpen) {
+  const { command, args } = openCommand(process.platform, reportPath(outDir))
+  try {
+    spawn(command, args, { detached: true, stdio: 'ignore' }).unref()
+  } catch (error) {
+    console.error('Could not open the report automatically: ' + error.message)
+    console.error('The report is written; open the link above by hand.')
+  }
+}

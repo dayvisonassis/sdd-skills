@@ -29,12 +29,15 @@ script computed them, not the model.
 
 ## INPUT
 
-Nothing required. Optionally a path to scope the run, and `--config` / `--out` to override
-locations.
+Nothing required. Optionally a path to scope the run, `--config` / `--out` to override
+locations, and `--open` to launch the finished report in the default browser.
 
 ## OUTPUT
 
-- `architecture-report/index.html` — the report, opened straight from disk
+- `architecture-report/index.html` — the report, opened straight from disk. The script prints
+  it as an absolute `file://` URL, which most terminals turn into a link and which pastes into a
+  browser as-is. **Hand that link to the reader**; a relative path leaves them working out where
+  the file went.
 - `architecture-report/architecture.json` — the data, and the only file this skill reads on
   later runs
 - A short spoken summary: the queue, what moved since the previous run, and what needs a human
@@ -106,8 +109,11 @@ codebase, twelve.
 ### 2.6 Run it and check the run before believing it
 
 ```bash
-node scripts/arch-report.mjs
+node scripts/arch-report.mjs --open
 ```
+
+`--open` launches the report in the default browser once it is written. Without it the script
+only prints the link, which is the better default when the run is not being watched.
 
 Confirm, in order:
 
@@ -126,6 +132,9 @@ Confirm, in order:
 ```bash
 node scripts/arch-report.mjs
 ```
+
+Add `--open` when a person is at the screen and wants to look; leave it off otherwise, and give
+them the printed link instead.
 
 Then **read `architecture-report/architecture.json` and nothing else.** Do not open source
 files. Every number the answer needs is already computed.
@@ -169,7 +178,11 @@ implemented or measured against a real codebase and removed. Every one is the ob
 suggestion.
 
 **Leave the report where it can be reopened.** It is a single self-contained file that makes no
-external request; it needs no server and no network.
+external request; it needs no server and no network, and it opens from `file://` — there is
+nothing to serve and nothing to automate a browser for.
+
+**Never open the report without being asked.** `--open` exists because the reader asked for it.
+A run that nobody is watching should not seize the screen.
 
 ## Edge cases
 
@@ -187,6 +200,10 @@ rather than hunting for something to flag.
 
 **A previous run used different cuts.** `meta.cuts` records them. Comparing across a cut change
 compares two different questions — say so instead of reporting movement that is an artefact.
+
+**`--open` does nothing, or opens the wrong application.** The report is still written and the
+link still printed — the flag is a convenience over the operating system's default handler, and a
+headless machine or a container has none. Never treat a failed open as a failed run.
 
 **The project already has a `scripts/` entry point of its own.** Copy under a subfolder and pass
 `--config` and `--out` explicitly rather than overwriting anything.
