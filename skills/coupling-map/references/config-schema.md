@@ -101,32 +101,36 @@ Measured on the PABX monorepo, dropping `tsConfig` from the frontend app:
 
 | | edges | declared | coverage |
 |---|---|---|---|
-| frontend **with** `tsConfig` | 2468 | 2413 | 102.3% |
-| frontend **without** | 1394 | 2413 | 57.8% |
-| backend | 671 | 659 | 101.8% |
+| frontend **with** `tsConfig` | 2468 | 2469 | 100.0% |
+| frontend **without** | 1394 | 2469 | 56.5% |
+| backend | 671 | 692 | 97.0% |
 
 43.5% of the frontend graph disappears, and the report still renders and still looks plausible.
 That is the worst failure this tool can have, and the floor is what prevents it.
 
-Coverage sits **above 100%** because the declared-import count is a regex over the source, and a
-regex cannot see everything. It is a floor, never an equality. Do not "fix" it into one, and
-**never lower the floor to make a run pass** — a failing run means the resolution is broken, and
-the fix is the `tsConfig` path or the `extensions` list.
+Coverage is a floor, never an equality — the denominator is a regex count, so treat anything in
+the high nineties as healthy. Do not "fix" it into an equality, and **never lower the floor to
+make a run pass**: a failing run means the resolution is broken, and the fix is the `tsConfig`
+path or the `extensions` list.
 
-What `countDeclared` sees: static `import ... from`, `export * from`, `export { a } from`,
-dynamic `import(...)`, and **`require(...)`** — relative and resolved-through-`baseUrl` alike, so
-a CommonJS project is measured rather than waved through. What it still misses: an import
-spanning several lines, and a bare side-effect `import './x'`. Both are pinned by
-`scripts/test/declared.test.mjs`, so widening the patterns shows up as a flipped assertion rather
-than as a number that moved on its own.
+`countDeclared` **anchors on the specifier, not on the statement**, which is what keeps the list
+of misses short. It counts four forms — `from '<internal>'`, a bare `import '<internal>'`,
+`import('<internal>')` and `require('<internal>')` — all sharing one prefix alternation. Because
+`from` always sits on the same line as the specifier it introduces, static imports, `export * from`,
+`export { a } from` and every multi-line form are covered by a single pattern that never crosses a
+newline. An earlier version matched `import`/`export` and then walked to `from`, and multi-line
+imports were invisible to it; at `printWidth: 80` that is most of a TypeScript file.
 
 **The direction of an error here is counter-intuitive.** Coverage is `edges / declared`, so
 undercounting `declared` makes coverage read *higher* and the guard *less* likely to fire — the
 broken report ships, which is the precise failure the floor exists to prevent. Overcounting only
 aborts a healthy run and sends someone to look, which is cheap and self-correcting. When in
-doubt, count it. The one thing never to count is a **package** import: `rxjs`, `@angular/core`
-and `fs` never become edges, so counting them would depress coverage against a denominator
-`madge` was never going to resolve.
+doubt, count it — a `from './x'` inside a comment or a template literal is counted, and that is
+the acceptable side of the trade. The one thing never to count is a **package** import: `rxjs`,
+`@angular/core` and `fs` never become edges, so counting them would depress coverage against a
+denominator `madge` was never going to resolve. `@angular/core` and `core-js/stable` are both
+pinned as negative cases in `scripts/test/declared.test.mjs`, because they are exactly what a
+loosely anchored prefix swallows.
 
 The check is applied **per app as well as to the total**, because a single misconfigured small app
 is otherwise diluted by a large healthy one.

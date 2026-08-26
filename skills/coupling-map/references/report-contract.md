@@ -51,13 +51,13 @@ measured.
   "totals": {
     "files": 959,                 // nodes in the graph, after path normalisation
     "edges": 3139,                // resolved import edges
-    "declared": 3072,             // internal imports counted in the source text
-    "coveragePct": 102.2,         // 100 * edges / declared, one decimal
+    "declared": 3161,             // internal imports counted in the source text
+    "coveragePct": 99.3,          // 100 * edges / declared, one decimal
     "unclassified": 28,           // files whose domain is "(sem dominio)"
     "unreadable": 0,              // files madge listed that could not be read; loc counted as 0
     "coverageByApp": [
-      { "name": "frontend", "files": 679, "edges": 2468, "declared": 2413, "unreadable": 0, "coveragePct": 102.3 },
-      { "name": "backend",  "files": 280, "edges": 671,  "declared": 659,  "unreadable": 0, "coveragePct": 101.8 }
+      { "name": "frontend", "files": 679, "edges": 2468, "declared": 2469, "unreadable": 0, "coveragePct": 100.0 },
+      { "name": "backend",  "files": 280, "edges": 671,  "declared": 692,  "unreadable": 0, "coveragePct": 97.0 }
     ]
   },
   "files": [],
@@ -69,10 +69,10 @@ measured.
 `meta.cuts` is copied in on purpose: reading an old report must not require finding the config that
 produced it.
 
-`totals.coveragePct` above 100 is normal and expected — `declared` is a regex count over the
-source, and it still misses multi-line and bare imports. It counts `require()` as of the fix in
-`declared.mjs`, because undercounting reads as higher coverage and a quieter guard. See
-`config-schema.md`.
+`totals.coveragePct` is a floor, not an equality: `declared` is a regex count over the source, so
+it lands near 100% rather than on it, and can sit either side. `countDeclared` anchors on the
+specifier rather than the statement, which is what lets one newline-free pattern cover static,
+multi-line and re-export forms alike. See `config-schema.md`.
 
 `totals.coverageByApp` exists because the floor is checked per app as well as in total: one small
 misconfigured app is otherwise diluted by a large healthy one, and the aggregate alone would not

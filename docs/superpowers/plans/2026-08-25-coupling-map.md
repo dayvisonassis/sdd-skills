@@ -1282,26 +1282,41 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 >    somebody has to remember to run. Domain and direction-violation counts were added to the
 >    printout for the same reason.
 >
-> 4. **`declared` did not count `require()`, and the reasoning that left it alone was inverted.**
->    Coverage is `edges / declared`, so undercounting the denominator reads as *higher* coverage
->    and a *quieter* guard — a false negative, which is the failure the floor exists to prevent,
->    not the safe direction. It changes almost nothing here (backend 109.5% to 101.8%, total
->    103.7% to 102.2%, both far above the floor) and that is exactly why it was easy to miss: the
->    hole opens on some other project, a CommonJS one, where `declared` would count almost
->    nothing and the guard would report healthy over a collapsed graph. The counting moved into
->    its own module, `coupling-map/declared.mjs`, for one reason: `collect.mjs` imports `madge`
->    and cannot be tested in a repository with no `node_modules`, which left the single most
->    important number in this task covered by nothing but one manual run. `declared.mjs` has no
->    dependency and `test/declared.test.mjs` pins thirteen cases, including two **known
->    undercounts left deliberately in place** — a multi-line import and a bare `import './x'`,
->    87 and 1 occurrence respectively in this monorepo — so that widening the patterns later
->    shows up as a flipped assertion instead of a number that moved on its own.
+> 4. **The denominator of the coverage guard was counting a fraction of the truth.** Coverage is
+>    `edges / declared`, so every import the regex misses reads as *higher* coverage and a
+>    *quieter* guard — a false negative, which is the failure the floor exists to prevent, not
+>    the safe direction. Three holes, found in that order: `require()` was not counted at all;
+>    multi-line imports were invisible; and a bare `import './x'` has no `from` to walk to. On
+>    this repository they were worth 46, 87 and 1 declared imports, which moved nothing — and
+>    that is exactly why they were easy to miss. Each opens wide somewhere else: a CommonJS
+>    project for the first, and for the second **any TypeScript formatted at `printWidth: 80`,
+>    which this monorepo's own frontend declares**, where most named imports span several lines
+>    and `declared` would count a small minority of the file while the guard reported health.
+>
+>    The fix that closed all three is smaller than the pattern it replaced: **stop matching the
+>    statement and match the specifier.** `from` always sits on the same line as the specifier it
+>    introduces, so `from '<internal>'` is newline-agnostic for free and covers static imports,
+>    `export * from`, `export { a } from` and every multi-line form with one pattern that never
+>    crosses a newline. Four patterns remain — `from`, bare `import`, `import()` and `require()` —
+>    sharing a single prefix alternation, which also retires the odd one out: `import()` had been
+>    carrying a shorter list than the others. Coverage went from 102.2% to **99.3%** total
+>    (frontend 100.0%, backend 97.0%) with the graph unmoved. A false positive here — a
+>    `from './x'` inside a comment — inflates the denominator and pushes coverage *down*, which
+>    makes the guard fire rather than stay silent, and that is the side to err on.
+>
+>    The counting moved into its own module, `coupling-map/declared.mjs`, for one reason:
+>    `collect.mjs` imports `madge` and cannot be tested in a repository with no `node_modules`,
+>    which left the single most important number in this task covered by nothing but one manual
+>    run. `declared.mjs` has no dependency, and `test/declared.test.mjs` pins fifteen cases,
+>    including the two that were once missed — kept as positive assertions so the file records
+>    that they were — and the negatives that matter most: `@angular/core` and `core-js/stable`
+>    must never count, since a `from`-anchored pattern is a wider net than what it replaced.
 >
 > `render.mjs` is a **throwaway stub** committed in `064b68c` purely so the CLI can be imported
 > before Task 7 exists. Task 7 replaces the whole file.
 >
 > **Verified end to end against the real repository:** 959 nodes, 196 domains, 3139 edges,
-> coverage 102.2% total / 102.3% frontend / 101.8% backend, pain 12, amplifier 1,
+> coverage 99.3% total / 100.0% frontend / 97.0% backend, pain 12, amplifier 1,
 > controller-as-dependency 3, orphans 24, cycles 2, direction violations 14, invariant
 > `Σ Ca* = Σ Ce* = 15987`, two runs byte-identical (same sha256, no date-like token anywhere in
 > the JSON), and acceptance criterion 5 passing in both directions. Path normalisation confirmed

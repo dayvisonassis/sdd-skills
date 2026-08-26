@@ -71,20 +71,40 @@ test('a core-js style package name is not mistaken for the core/ prefix', () => 
   assert.equal(countDeclared("import 'core-js/stable'\n"), 0)
 })
 
-// Known undercounts, pinned here deliberately rather than fixed quietly.
-// Both make coverage read higher than it is, which is the unsafe direction, but
-// widening the pattern is a separate decision with its own measurement: on the
-// PABX monorepo these two miss 88 declared imports (87 multi-line, 1 bare) out of
-// roughly 3100. The tests exist so the day someone widens them, the change is
-// visible as a flipped assertion instead of a silently moving number.
+// These two were once missed, and the miss was invisible: it read as HIGHER
+// coverage on a repository where it happened to be 88 imports out of ~3100.
+// It was never a small bug. TypeScript formatted at printWidth 80 - which this
+// monorepo's own frontend declares - puts most named imports on several lines,
+// so on another project the multi-line case is the majority of the file, and
+// the guard would report health over a graph that had collapsed. The fix was to
+// stop matching the statement and match the specifier: 'from' always sits on the
+// specifier's line, so the pattern never has to cross a newline at all.
 
-test('KNOWN UNDERCOUNT: an import spanning multiple lines is not seen', () => {
+test('an import spanning multiple lines counts', () => {
   const source = ['import {', '  A,', '  B,', "} from './a.service'", ''].join('\n')
-  assert.equal(countDeclared(source), 0)
+  assert.equal(countDeclared(source), 1)
 })
 
-test('KNOWN UNDERCOUNT: a bare side-effect import has no from and is not seen', () => {
-  assert.equal(countDeclared("import './testing/chart-js-mock'\n"), 0)
+test('several multi-line imports count once each, not once per line', () => {
+  const source = [
+    'import {',
+    '  A,',
+    '  B,',
+    "} from './a.service'",
+    'import {',
+    '  C,',
+    "} from 'app/shared/c.service'",
+    '',
+  ].join('\n')
+  assert.equal(countDeclared(source), 2)
+})
+
+test('a bare side-effect import has no from and still counts', () => {
+  assert.equal(countDeclared("import './testing/chart-js-mock'\n"), 1)
+})
+
+test('a static import counts once, not once for import and once for from', () => {
+  assert.equal(countDeclared("import A from './a.service'\n"), 1)
 })
 
 test('an empty file counts nothing and does not throw', () => {
