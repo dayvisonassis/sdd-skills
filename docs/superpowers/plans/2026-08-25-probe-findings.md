@@ -52,7 +52,7 @@ Frontend ~20s, backend ~3s. Nao precisa de cache.
 
 ## Cinco correcoes que a sonda forcou
 
-### 1. O escopo real e 962 arquivos, nao ~1834
+### 1. O escopo real e ~960 arquivos, nao ~1834
 
 A spec somava 678 do frontend com 1156 do backend. Os 1156 sao o diretorio `apps/backend`
 inteiro:
@@ -138,7 +138,7 @@ a fila tem 12 de 959 (1,25%) e os inclui.
 | zona de dor | `Ca* >= 15` e `LOC >= 400` | 12 | 1,25% |
 | amplificador | `LOC <= 150` e `Ce >= 15` e `Ca >= 30` | 1 | 0,10% |
 | folha como dependencia | camada `controllers` e `Ca >= 10` | 3 | 0,31% |
-| orfaos | `Ca == 0` e `Ce == 0` | 23 | 2,40% |
+| orfaos | `Ca == 0` e `Ce == 0` | 24 | 2,50% |
 | cobertura minima | 85% | — | — |
 
 Distribuicoes que os sustentam:
@@ -155,12 +155,13 @@ Distribuicoes que os sustentam:
 
 ## O que a sonda confirmou do desenho
 
-**A invariante ja fecha:** soma de `Ca*` = soma de `Ce*` = 15996, com BFS ingenuo. E o teste
-que a Tarefa 3 usa para validar a travessia com SCC.
+**A invariante ja fecha:** soma de `Ca*` = soma de `Ce*` = 15996 com BFS ingenuo, e **15987 com
+o `transitiveCounts` final**, que exclui os membros do proprio ciclo. E o teste que a Tarefa 3
+usa para validar a travessia com SCC.
 
 **O achado numero 1 estava certo, quase no numero.** A aproximacao por basename dizia
 `authorization.middleware.js` com 93 dependentes e 1415 linhas. Real: **96 dependentes, 1416
-linhas, `Ca*` 101** — o topo da fila.
+linhas, `Ca*` 100** — o topo da fila.
 
 **O criterio de aceitacao 5 passa nos dois lados.** `authorization.middleware.js` esta na zona
 de dor; `toast.service.ts` **nao** esta, apesar de ter o quarto maior `Ca*` do repositorio
@@ -180,8 +181,8 @@ fase de desenho.
 
 | `Ca*` | LOC | arquivo |
 |---|---|---|
-| 101 | 519 | `apps/backend/src/api/v2/models/audit.model.js` |
-| 101 | 1416 | `apps/backend/src/middleware/authorization.middleware.js` |
+| 100 | 519 | `apps/backend/src/api/v2/models/audit.model.js` |
+| 100 | 1416 | `apps/backend/src/middleware/authorization.middleware.js` |
 | 99 | 418 | `apps/backend/src/api/v2/models/user.model.js` |
 | 77 | 675 | `apps/frontend/src/app/agent-dashboard/agent-dashboard.service.ts` |
 | 70 | 537 | `apps/frontend/src/app/pdf-csv-generator/pdf-generator/pdf-generator.component.ts` |
@@ -196,3 +197,30 @@ fase de desenho.
 Doze arquivos de 959. `dialer.model.js`, o maior do repositorio com 4403 linhas, **nao** esta na
 lista: `Ca*` 9. Gordo e contido, baixa prioridade — que e o veredito que o desenho previu para
 ele desde o inicio.
+
+---
+
+## Correcoes a esta sonda, medidas na implementacao (2026-08-25)
+
+Dois numeros acima foram medidos com um script de sondagem que difere do pipeline final. Ambos
+foram reconferidos rodando `classify` -> `computeMetrics` -> `detect` de verdade sobre os 959
+nos, e o pipeline esta certo nos dois casos.
+
+**Orfaos: 24, nao 23.** `apps/backend/src/instrumentation.js` tem exatamente um import interno,
+`require('../package.json')`. A exclusao `\.json$` — que e a correcao numero 2 desta propria
+sonda — apaga essa aresta e transforma o arquivo em orfao. Os 23 foram medidos **antes** da
+exclusao existir. O total de nos segue 959, porque `package.json` so aparecia como alvo, nunca
+como chave.
+
+**`Ca*` de `audit.model.js` e `authorization.middleware.js`: 100, nao 101.** Os dois se importam
+mutuamente — sao um dos dois ciclos do repositorio. O `transitiveCounts` exclui de proposito os
+demais membros do proprio componente (secao 4.1 do documento de design: quem ja esta acoplado
+mutuamente nao "quebra por consequencia", e o ciclo e reportado pelo detector proprio). A sonda
+usava BFS ingenuo, que os conta. A diferenca de 1 e exatamente o outro membro do ciclo.
+
+Tudo o mais fecha exatamente: **pain 12, amplificador 1, controller como dependencia 3**, mesmas
+listas de arquivos, invariante `Σ Ca* = Σ Ce* = 15987`, e o criterio de aceitacao 5 passando dos
+dois lados (`authorization.middleware.js` na zona de dor, `toast.service.ts` fora dela).
+
+Numeros que a sonda nao tinha: **2 ciclos** (ambos de 2 nos, nenhum self-loop), **14 violacoes de
+direcao** (13 delas `models -> controllers` no backend) e **196 dominios**.
