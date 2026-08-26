@@ -25,6 +25,7 @@ sdd-skills/
 │   ├── fix-runner/              # minimal CODE corrector (dispatched by evaluator or qa-preflight)
 │   ├── qa-preflight/            # feature done: fixes what is objective, hands the QA what needs judgement
 │   ├── playwright-cli/          # drive a real browser: smoke tests, visual checks, Playwright specs
+│   ├── coupling-map/            # which files to refactor first: blast radius x size, as a standalone HTML report
 │   ├── unit-test-writer/            # PABX: Angular .spec.ts + Node apps/backend/__tests__/unit
 │   ├── unit-test-validator/         # PABX: audits the above
 │   ├── integration-test-writer/     # PABX: apps/backend/__tests__/integration (supertest + DB)
@@ -175,7 +176,19 @@ and ready-made recipes (greenfield, brownfield, batch).
   code); `implement-feature`/`fix-runner` write code (not gate infrastructure); `evaluator`
   writes state/reports (it never edits code). Keeping these roles separate is intentional.
 - **Reference docs** in `docs/` explain the rationale behind each piece — read them when you
-  want the "why"; the guide is enough for day-to-day use.
+  want the "why"; the guide is enough for day-to-day use. They stay in this repository and are
+  **not** part of an installed skill: everything a skill needs to run lives in its own folder.
+- **`coupling-map` ships executable code**, which no other skill here does — a Node script it
+  copies into the target project, plus the tests that cover it. Run them from this repository's
+  root, with the pattern **quoted** so Node expands it rather than the shell:
+
+  ```bash
+  node --test "skills/**/test/*.test.mjs"
+  ```
+
+  No `package.json` and no `node_modules` are needed: the tests use only `node:test` and
+  `node:assert`. The one runtime dependency, `madge`, is installed by the skill into the project
+  being analysed, never here.
 
 ---
 
