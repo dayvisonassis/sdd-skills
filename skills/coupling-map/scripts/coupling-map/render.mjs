@@ -92,6 +92,7 @@ tr.pain td:first-child { color: var(--pain); }
 tr.flagged td:first-child { color: var(--warn); }
 .tablewrap { overflow-x: auto; }
 circle { cursor: pointer; }
+#overlay { pointer-events: none; }
 .axis { stroke: var(--line); }
 .grid { stroke: var(--line); stroke-opacity: 0.55; stroke-dasharray: 2 4; }
 .tick { fill: var(--muted); font-size: 10px; }
@@ -105,6 +106,11 @@ h3:first-child { margin-top: 0; }
   border-radius: 50%; margin-right: 6px; background: var(--accent); }
 .legend .is-pain::before { background: var(--pain); }
 .legend .is-flagged::before { background: var(--warn); }
+#card .picked { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; word-break: break-all; }
+#card .links { color: var(--muted); font-size: 12px; word-break: break-all; }
+#card button { margin-right: 4px; cursor: pointer; }
+#card button.on { border-color: var(--accent); color: var(--accent); }
 .stats { list-style: none; margin: 0; padding: 0; }
 .stats li { display: flex; justify-content: space-between; gap: 8px;
   border-bottom: 1px solid var(--line); padding: 3px 0; }
@@ -144,6 +150,10 @@ export function renderHtml(report) {
     Tamanho do ponto: <b>Ce</b>. Os dois eixos sao logaritmicos.</p>
     <p>Canto superior direito e a fila de refatoracao. Canto inferior direito e fundacao
     saudavel: muito dependida e pequena. Nao tocar.</p>
+    <p>Passe o mouse sobre um ponto para ver as ligacoes dele: linha cheia e o que ele
+    <b>usa</b>, linha tracejada e <b>quem depende dele</b>. Clique para fixar e escolher a
+    profundidade. Vizinho que o Top N escondeu volta esmaecido - o filtro nunca esconde uma
+    ligacao.</p>
     <p class="note" id="domain-note" hidden>Um dominio toma o <b>maior Ca*</b> entre os seus
     arquivos e a <b>soma</b> das linhas deles, entao a posicao dele no grafico pode vir de dois
     arquivos diferentes. As coordenadas reais de um arquivo estao em <b>Por arquivo</b>.</p>
@@ -170,11 +180,17 @@ const PLOT = { left: 60, right: 690, top: 30, bottom: 410, width: 630, height: 3
 const TICK_GAP = 26;
 const TIERS = ['pain', 'amplifier', 'leafAsDependency'];
 const NO_DOMAIN = '(sem dominio)';
+const DEPTHS = [['1', '1'], ['2', '2'], ['Infinity', 'tudo']];
+const MAX_LINKS = 25;
 
 let sortKey = 'caStar';
 let sortDir = -1;
 let tiered = true;
 let domainRows = null;
+let graphs = null;
+let focus = null;
+let hover = null;
+let depth = 1;
 
 function unit() {
   return document.getElementById('unit').value;
@@ -292,11 +308,34 @@ function ticks(max, size) {
   return out;
 }
 
+function byPath() {
+  const index = new Map();
+  for (const row of rows()) index.set(row.path, row);
+  return index;
+}
+
+function axes() {
+  const all = rows();
+  return { maxX: maxOf(all, 'caStar'), maxY: maxOf(all, 'loc') };
+}
+
+function pointOf(node, limits) {
+  return {
+    x: PLOT.left + scale(node.caStar, limits.maxX, PLOT.width),
+    y: PLOT.bottom - scale(node.loc, limits.maxY, PLOT.height),
+  };
+}
+
+function radiusOf(node) {
+  return 3 + Math.min(9, Math.log2(num(node.ce) + 1) * 2);
+}
+
 function draw(nodes) {
   const svg = document.getElementById('chart');
   const all = rows();
-  const maxX = maxOf(all, 'caStar');
-  const maxY = maxOf(all, 'loc');
+  const limits = axes();
+  const maxX = limits.maxX;
+  const maxY = limits.maxY;
   const parts = [];
 
   for (const value of ticks(maxX, PLOT.width)) {
@@ -318,11 +357,13 @@ function draw(nodes) {
   parts.push('<line class="axis" x1="60" y1="20" x2="60" y2="410"/>');
   parts.push('<text class="axis-label" x="375" y="448" text-anchor="middle">Ca* - raio de explosao (log)</text>');
   parts.push('<text class="axis-label" x="14" y="215" text-anchor="middle" transform="rotate(-90 14 215)">LOC (log)</text>');
+  parts.push('<g id="overlay"></g>');
 
   for (const node of nodes) {
-    const cx = PLOT.left + scale(node.caStar, maxX, PLOT.width);
-    const cy = PLOT.bottom - scale(node.loc, maxY, PLOT.height);
-    const radius = 3 + Math.min(9, Math.log2(num(node.ce) + 1) * 2);
+    const point = pointOf(node, limits);
+    const cx = point.x;
+    const cy = point.y;
+    const radius = radiusOf(node);
     const flags = node.detectors || [];
     const fill = flags.indexOf('pain') !== -1
       ? 'var(--pain)'
@@ -379,11 +420,203 @@ function table(nodes) {
   }
 }
 
+function linksFrom(pairs) {
+  const out = new Map();
+  const inbound = new Map();
+  for (const pair of pairs) {
+    if (!out.has(pair[0])) out.set(pair[0], []);
+    if (!inbound.has(pair[1])) inbound.set(pair[1], []);
+    if (out.get(pair[0]).indexOf(pair[1]) === -1) out.get(pair[0]).push(pair[1]);
+    if (inbound.get(pair[1]).indexOf(pair[0]) === -1) inbound.get(pair[1]).push(pair[0]);
+  }
+  return { out, inbound };
+}
+
+function filePairs() {
+  const known = new Set(REPORT.files.map(file => file.path));
+  const pairs = [];
+  for (const file of REPORT.files) {
+    for (const target of file.dependsOn || []) {
+      if (target !== file.path && known.has(target)) pairs.push([file.path, target]);
+    }
+    for (const source of file.dependedOnBy || []) {
+      if (source !== file.path && known.has(source)) pairs.push([source, file.path]);
+    }
+  }
+  return pairs;
+}
+
+function domainPairs() {
+  const home = new Map();
+  for (const file of REPORT.files) home.set(file.path, file.domain);
+  const named = new Set(withDetectors().map(row => row.domain));
+  const pairs = [];
+  for (const pair of filePairs()) {
+    const from = home.get(pair[0]);
+    const to = home.get(pair[1]);
+    if (from === to || !named.has(from) || !named.has(to)) continue;
+    pairs.push([from, to]);
+  }
+  return pairs;
+}
+
+function graph() {
+  if (graphs === null) {
+    graphs = { file: linksFrom(filePairs()), domain: linksFrom(domainPairs()) };
+  }
+  return graphs[unit()];
+}
+
+function reach(links, path, limit) {
+  const seen = new Set([path]);
+  const found = new Set();
+  let frontier = [path];
+  let level = 0;
+  while (frontier.length > 0 && level < limit) {
+    const next = [];
+    for (const node of frontier) {
+      for (const other of links.get(node) || []) {
+        if (seen.has(other)) continue;
+        seen.add(other);
+        found.add(other);
+        next.push(other);
+      }
+    }
+    frontier = next;
+    level += 1;
+  }
+  return found;
+}
+
+function neighbourhood(path, depth) {
+  const links = graph();
+  return { out: reach(links.out, path, depth), inbound: reach(links.inbound, path, depth) };
+}
+
+function edgeMarkup(from, to, outbound, solid) {
+  return '<line class="edge" x1="' + from.x.toFixed(1) + '" y1="' + from.y.toFixed(1) +
+    '" x2="' + to.x.toFixed(1) + '" y2="' + to.y.toFixed(1) +
+    '" stroke="' + (outbound ? 'var(--pain)' : 'var(--accent)') + '" stroke-width="1"' +
+    (outbound ? '' : ' stroke-dasharray="3 3"') +
+    ' stroke-opacity="' + (solid ? '0.9' : '0.3') + '"/>';
+}
+
+function overlayMarkup(path, depth) {
+  const index = byPath();
+  const origin = index.get(path);
+  if (origin === undefined) return '';
+  const limits = axes();
+  const start = pointOf(origin, limits);
+  const shown = new Set(visible().map(node => node.path));
+  const near = neighbourhood(path, depth);
+  const faded = new Set();
+  const parts = [];
+  for (const target of near.out) {
+    const row = index.get(target);
+    if (row === undefined) continue;
+    parts.push(edgeMarkup(start, pointOf(row, limits), true, shown.has(target)));
+    if (!shown.has(target)) faded.add(target);
+  }
+  for (const source of near.inbound) {
+    const row = index.get(source);
+    if (row === undefined) continue;
+    parts.push(edgeMarkup(pointOf(row, limits), start, false, shown.has(source)));
+    if (!shown.has(source)) faded.add(source);
+  }
+  for (const hidden of faded) {
+    const row = index.get(hidden);
+    const point = pointOf(row, limits);
+    parts.push('<circle class="ghost" cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) +
+      '" r="' + radiusOf(row).toFixed(1) + '" fill="var(--muted)" fill-opacity="0.35">' +
+      '<title>' + esc(row.path) + '</title></circle>');
+  }
+  parts.push('<circle class="ring" cx="' + start.x.toFixed(1) + '" cy="' + start.y.toFixed(1) +
+    '" r="' + (radiusOf(origin) + 4).toFixed(1) +
+    '" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-opacity="0.8"/>');
+  return parts.join('');
+}
+
+function linkList(paths) {
+  if (paths.length === 0) return '-';
+  const head = paths.slice(0, MAX_LINKS).map(esc).join(', ');
+  return paths.length > MAX_LINKS ? head + ' +' + (paths.length - MAX_LINKS) : head;
+}
+
+function card(path) {
+  const row = byPath().get(path);
+  if (row === undefined) return '';
+  const links = graph();
+  const facts = unit() === 'domain'
+    ? [['arquivos', row.files], ['Ca*', row.caStar], ['Ce*', row.ceStar], ['LOC', row.loc]]
+    : [['Ca*', row.caStar], ['Ce*', row.ceStar], ['LOC', row.loc], ['Ce', row.ce], ['Ca', row.ca]];
+  const flags = row.detectors || [];
+  return '<h3>Selecionado</h3>' +
+    '<p class="picked">' + esc(row.path) + '</p>' +
+    '<ul class="stats">' + facts.map(function (entry) {
+      return '<li><span>' + esc(entry[0]) + '</span><b>' +
+        (absent(entry[1]) ? '-' : esc(entry[1])) + '</b></li>';
+    }).join('') + '</ul>' +
+    '<p>' + (flags.length > 0 ? esc(flags.join(', ')) : 'nenhum detector') + '</p>' +
+    '<p>Profundidade: ' + DEPTHS.map(function (entry) {
+      return '<button data-depth="' + entry[0] + '"' +
+        (String(depth) === entry[0] ? ' class="on"' : '') + '>' + entry[1] + '</button>';
+    }).join('') + '</p>' +
+    '<p class="links"><b>depende de:</b> ' + linkList(links.out.get(path) || []) + '</p>' +
+    '<p class="links"><b>dependem dele:</b> ' + linkList(links.inbound.get(path) || []) + '</p>';
+}
+
+function paint() {
+  const path = hover === null ? focus : hover;
+  document.getElementById('overlay').innerHTML =
+    path === null ? '' : overlayMarkup(path, depth);
+}
+
+function bindDepth() {
+  for (const button of document.querySelectorAll('#card button')) {
+    button.onclick = function () {
+      depth = button.dataset.depth === 'Infinity' ? Infinity : Number(button.dataset.depth);
+      syncCard();
+      paint();
+    };
+  }
+}
+
+function syncCard() {
+  if (focus !== null && !byPath().has(focus)) focus = null;
+  document.getElementById('card').innerHTML = focus === null ? '' : card(focus);
+  bindDepth();
+}
+
+function bindChart() {
+  for (const circle of document.querySelectorAll('#chart circle')) {
+    const path = circle.dataset.path;
+    if (path === undefined) continue;
+    circle.onmouseenter = function () {
+      hover = path;
+      paint();
+    };
+    circle.onmouseleave = function () {
+      hover = null;
+      paint();
+    };
+    circle.onclick = function () {
+      focus = focus === path ? null : path;
+      hover = path;
+      syncCard();
+      paint();
+    };
+  }
+}
+
 function refresh() {
   const nodes = visible();
+  hover = null;
   document.getElementById('domain-note').hidden = unit() !== 'domain';
   draw(nodes);
   table(nodes);
+  bindChart();
+  syncCard();
+  paint();
 }
 
 document.getElementById('unit').onchange = function () {

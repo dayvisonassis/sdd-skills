@@ -19,21 +19,51 @@ const REPORT = {
 // The emitted page is a browser program. Regexes over its source can only show
 // that a string is present, never that the program behaves. These tests run the
 // embedded script against a shim that implements exactly the DOM surface the
-// script touches, so draw(), the table and the sort are exercised for real.
+// script touches, so draw(), the table, the sort and the overlay are exercised
+// for real.
+const ENTITIES = [
+  [/&quot;/g, '"'],
+  [/&lt;/g, '<'],
+  [/&gt;/g, '>'],
+  [/&amp;/g, '&'],
+]
+
+// A browser hands the DECODED value back through dataset, never the escaped one
+// that appears in the markup. Reproducing that is what makes the round trip from
+// an escaped data-path back to the lookup key the script uses testable at all.
+function decode(value) {
+  let out = String(value)
+  for (const [pattern, replacement] of ENTITIES) out = out.replace(pattern, replacement)
+  return out
+}
+
+function parseTags(markup, tag) {
+  const pattern = new RegExp('<' + tag + '\\b[^>]*>', 'g')
+  return [...String(markup).matchAll(pattern)].map(match => {
+    const dataset = {}
+    for (const attr of match[0].matchAll(/data-([a-z]+)="([^"]*)"/g)) {
+      dataset[attr[1]] = decode(attr[2])
+    }
+    return { tag: match[0], dataset, onclick: null, onmouseenter: null, onmouseleave: null }
+  })
+}
+
 function element() {
   return {
     value: '',
     innerHTML: '',
     textContent: '',
+    hidden: false,
     onchange: null,
     dataset: {},
-    querySelectorAll() {
-      if (this.cachedFor !== this.innerHTML) {
-        this.cachedFor = this.innerHTML
-        this.cached = [...String(this.innerHTML).matchAll(/data-key="([^"]*)"/g)].map(match => ({
-          dataset: { key: match[1] },
-          onclick: null,
-        }))
+    // Cached against the markup it was parsed from, so a second query over
+    // unchanged markup returns the SAME objects: the script binds handlers on
+    // the first call and the test reads them back on the second.
+    querySelectorAll(selector) {
+      const key = selector + ' ' + this.innerHTML
+      if (this.cachedFor !== key) {
+        this.cachedFor = key
+        this.cached = parseTags(this.innerHTML, selector)
       }
       return this.cached
     },
@@ -70,15 +100,63 @@ function evaluate(html, options = {}) {
   lookup('unit').value = options.unit ?? markupDefault(html, 'unit')
   lookup('topn').value = options.topn ?? markupDefault(html, 'topn')
 
+  // Writing the chart replaces its children, the overlay group among them.
+  // Modelling that is the only way a test can tell a repainted overlay apart
+  // from a stale one that merely survived the redraw.
+  const chart = lookup('chart')
+  const overlay = lookup('overlay')
+  let chartMarkup = ''
+  Object.defineProperty(chart, 'innerHTML', {
+    get: () => chartMarkup,
+    set(value) {
+      chartMarkup = value
+      overlay.innerHTML = ''
+    },
+  })
+
   const document = {
     getElementById: id => lookup(id),
     querySelector: selector => lookup(selector),
+    querySelectorAll(selector) {
+      const parts = selector.split(' ')
+      const host = parts.length === 1 ? parts[0] : parts[0].replace('#', '')
+      return lookup(host).querySelectorAll(parts[parts.length - 1])
+    },
   }
+  // typeof guards rather than a plain identifier list: before Task 8 exists,
+  // naming neighbourhood directly would throw a ReferenceError inside every
+  // test that uses the harness, hiding which tests the new behaviour drives.
   const api = new Function(
     'document',
-    body + '\nreturn { draw, table, refresh, rows, sorted, visible };'
+    body +
+      '\nreturn {\n' +
+      '  draw, table, refresh, rows, sorted, visible,\n' +
+      '  neighbourhood: typeof neighbourhood === "function" ? neighbourhood : undefined,\n' +
+      '  card: typeof card === "function" ? card : undefined,\n' +
+      '  state: () => ({\n' +
+      '    focus: typeof focus === "undefined" ? undefined : focus,\n' +
+      '    depth: typeof depth === "undefined" ? undefined : depth,\n' +
+      '  }),\n' +
+      '};'
   )(document)
-  return { api, document, chart: () => lookup('chart').innerHTML, head: () => lookup('#table thead'), body: () => lookup('#table tbody').innerHTML }
+  return {
+    api,
+    document,
+    chart: () => lookup('chart').innerHTML,
+    overlay: () => lookup('overlay').innerHTML,
+    card: () => lookup('card').innerHTML,
+    head: () => lookup('#table thead'),
+    body: () => lookup('#table tbody').innerHTML,
+    point: path =>
+      lookup('chart')
+        .querySelectorAll('circle')
+        .find(node => node.dataset.path === path),
+    depthButton: value =>
+      lookup('card')
+        .querySelectorAll('button')
+        .find(node => node.dataset.depth === value),
+    select: id => lookup(id),
+  }
 }
 
 const circles = markup => [...markup.matchAll(/<circle\b[^>]*>/g)].map(match => match[0])
@@ -444,4 +522,311 @@ test('the aggregation caveat is shown for domains and hidden for files', () => {
   const asDomains = evaluate(renderHtml(REPORT), { unit: 'domain', topn: '0' })
   asDomains.api.refresh()
   assert.equal(asDomains.document.getElementById('domain-note').hidden, false)
+})
+
+// ---------------------------------------------------------------------------
+// Task 8 - hover, the detail card and the focus depth control.
+// ---------------------------------------------------------------------------
+
+const lines = markup => [...markup.matchAll(/<line\b[^>]*>/g)].map(match => match[0])
+
+const file = (path, over) => ({
+  path,
+  app: 'a',
+  domain: 'd',
+  layer: null,
+  loc: 100,
+  ce: 0,
+  ca: 0,
+  ceStar: 0,
+  caStar: 1,
+  i: null,
+  dependsOn: [],
+  dependedOnBy: [],
+  detectors: [],
+  ...over,
+})
+
+const asReport = (files, domains) => ({
+  ...structuredClone(REPORT),
+  files,
+  domains: domains ?? [
+    { domain: 'd', apps: ['a'], files: files.length, loc: 100, ce: 0, ca: 0, caStar: 1, ceStar: 0 },
+  ],
+})
+
+function lcg(seed) {
+  let state = seed % 2147483647
+  return () => {
+    state = (state * 48271) % 2147483647
+    return state / 2147483647
+  }
+}
+
+// Random graphs with self-edges, cycles and unreachable pockets, built from a
+// fixed seed so a failure is reproducible.
+function randomFiles(seed, size) {
+  const next = lcg(seed)
+  const paths = Array.from({ length: size }, (unused, index) => 'f' + index + '.ts')
+  const out = paths.map(() => new Set())
+  for (let from = 0; from < size; from++) {
+    const count = Math.floor(next() * 4)
+    for (let edge = 0; edge < count; edge++) {
+      out[from].add(paths[Math.floor(next() * size)])
+    }
+  }
+  return paths.map((path, index) =>
+    file(path, {
+      domain: 'd' + (index % 3),
+      loc: 10 + index,
+      ce: out[index].size,
+      caStar: index % 7,
+      dependsOn: [...out[index]].sort(),
+      dependedOnBy: paths.filter((other, otherIndex) => out[otherIndex].has(path)).sort(),
+    })
+  )
+}
+
+// The reference is deliberately a DIFFERENT formulation from the page's
+// frontier walk: it grows one closure set by whole rounds. Two implementations
+// of the same algorithm would agree on the same mistake.
+function reachable(files, path, depth, forward) {
+  const edges = new Map(files.map(entry => [entry.path, []]))
+  for (const entry of files) {
+    for (const target of entry.dependsOn) {
+      if (!edges.has(target) || target === entry.path) continue
+      if (forward) edges.get(entry.path).push(target)
+      else edges.get(target).push(entry.path)
+    }
+  }
+  let collected = new Set([path])
+  const rounds = Number.isFinite(depth) ? depth : files.length
+  for (let round = 0; round < rounds; round++) {
+    const grown = new Set(collected)
+    for (const node of collected) {
+      for (const other of edges.get(node) || []) grown.add(other)
+    }
+    collected = grown
+  }
+  collected.delete(path)
+  return [...collected].sort()
+}
+
+test('neighbourhood agrees with a brute-force closure over random graphs', () => {
+  for (const seed of [1, 7, 23, 101, 999]) {
+    const files = randomFiles(seed, 12)
+    const domains = ['d0', 'd1', 'd2'].map(name => ({
+      domain: name, apps: ['a'], files: 4, loc: 40, ce: 0, ca: 0, caStar: 1, ceStar: 0,
+    }))
+    const { api } = evaluate(renderHtml(asReport(files, domains)), { unit: 'file', topn: '0' })
+    for (const origin of files) {
+      for (const depth of [1, 2, 3, Infinity]) {
+        const near = api.neighbourhood(origin.path, depth)
+        assert.deepEqual([...near.out].sort(), reachable(files, origin.path, depth, true))
+        assert.deepEqual([...near.inbound].sort(), reachable(files, origin.path, depth, false))
+      }
+    }
+  }
+})
+
+test('neighbourhood never returns the node it started from, cycle or not', () => {
+  // The report carries two real cycles, and a file that imports itself is a
+  // legal self-loop. Both walk back onto the origin, which would then be drawn
+  // as a zero-length edge from a point to itself and counted in its own radius.
+  const files = [
+    file('a.ts', { dependsOn: ['b.ts', 'a.ts'], dependedOnBy: ['b.ts', 'a.ts'] }),
+    file('b.ts', { dependsOn: ['a.ts'], dependedOnBy: ['a.ts'] }),
+  ]
+  const { api } = evaluate(renderHtml(asReport(files)), { unit: 'file', topn: '0' })
+  for (const depth of [1, 2, 5, Infinity]) {
+    assert.deepEqual([...api.neighbourhood('a.ts', depth).out], ['b.ts'])
+    assert.deepEqual([...api.neighbourhood('a.ts', depth).inbound], ['b.ts'])
+  }
+})
+
+test('depth Infinity terminates on a cycle and returns the whole radius', () => {
+  const files = [
+    file('a.ts', { dependsOn: ['b.ts'], dependedOnBy: ['c.ts'] }),
+    file('b.ts', { dependsOn: ['c.ts'], dependedOnBy: ['a.ts'] }),
+    file('c.ts', { dependsOn: ['a.ts'], dependedOnBy: ['b.ts'] }),
+  ]
+  const { api } = evaluate(renderHtml(asReport(files)), { unit: 'file', topn: '0' })
+  assert.deepEqual([...api.neighbourhood('a.ts', 1).out], ['b.ts'])
+  assert.deepEqual([...api.neighbourhood('a.ts', Infinity).out].sort(), ['b.ts', 'c.ts'])
+  assert.deepEqual([...api.neighbourhood('a.ts', Infinity).inbound].sort(), ['b.ts', 'c.ts'])
+})
+
+test('hovering a domain draws the domain graph rather than nothing', () => {
+  // The chart has two units. Reading edges out of REPORT.files while the chart
+  // is showing domains finds no row for "alpha" at all: the feature silently
+  // does nothing in one of the two views the report ships with.
+  const harness = evaluate(renderHtml(REPORT), { unit: 'domain', topn: '0' })
+  harness.api.refresh()
+  assert.deepEqual([...harness.api.neighbourhood('alpha', 1).out], ['beta'])
+  assert.deepEqual([...harness.api.neighbourhood('beta', 1).inbound], ['alpha'])
+  harness.point('alpha').onmouseenter()
+  assert.equal(lines(harness.overlay()).length, 1)
+})
+
+test('the excluded bucket is not resurrected as a domain neighbour', () => {
+  const harness = evaluate(renderHtml(WITH_BUCKET), { unit: 'domain', topn: '0' })
+  harness.api.refresh()
+  assert.deepEqual([...harness.api.neighbourhood('alpha', Infinity).out], ['beta'])
+  harness.point('alpha').onmouseenter()
+  assert.equal(harness.overlay().includes('(sem dominio)'), false)
+})
+
+test('a file inside the bucket is still reachable in the file view', () => {
+  // Excluding the aggregate must not lose the file. The edge only exists in
+  // environment.ts's dependedOnBy, so this also pins that both directions of
+  // the contract are read, not just dependsOn.
+  const harness = evaluate(renderHtml(WITH_BUCKET), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  assert.deepEqual(
+    [...harness.api.neighbourhood('a.ts', 1).out].sort(),
+    ['b.ts', 'environments/environment.ts']
+  )
+})
+
+test('overlay edges land exactly on the plotted centres, on the same axes as draw', () => {
+  // draw() and the overlay are two renderers of one coordinate system. Any
+  // second copy of the plot box or of the axis maxima drifts, and an edge then
+  // points at empty space next to the circle it is supposed to touch.
+  const harness = evaluate(renderHtml(REPORT), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  const origin = harness.point('a.ts').tag
+  const target = harness.point('b.ts').tag
+  harness.point('a.ts').onmouseenter()
+  const drawn = lines(harness.overlay())
+  assert.equal(drawn.length, 1)
+  assert.equal(attribute(drawn[0], 'x1'), attribute(origin, 'cx'))
+  assert.equal(attribute(drawn[0], 'y1'), attribute(origin, 'cy'))
+  assert.equal(attribute(drawn[0], 'x2'), attribute(target, 'cx'))
+  assert.equal(attribute(drawn[0], 'y2'), attribute(target, 'cy'))
+})
+
+test('a neighbour hidden by the Top N filter is drawn faded, never dropped', () => {
+  // hidden.ts holds the maximum on both axes and is filtered out of the view,
+  // so an overlay that scaled itself over the VISIBLE nodes would place every
+  // endpoint somewhere else than draw() did.
+  const files = [
+    file('hub.ts', { loc: 900, ce: 1, caStar: 90, ceStar: 1, dependsOn: ['hidden.ts'], detectors: ['pain'] }),
+    file('hidden.ts', { loc: 5000, ca: 1, caStar: 200, dependedOnBy: ['hub.ts'] }),
+  ]
+  const harness = evaluate(renderHtml(asReport(files)), { unit: 'file', topn: '1' })
+  harness.api.refresh()
+  assert.equal(circles(harness.chart()).length, 1)
+  const hub = harness.point('hub.ts').tag
+  harness.point('hub.ts').onmouseenter()
+  const drawn = lines(harness.overlay())
+  assert.equal(drawn.length, 1)
+  assert.equal(Number(attribute(drawn[0], 'stroke-opacity')) < 0.5, true)
+  assert.equal(attribute(drawn[0], 'x1'), attribute(hub, 'cx'))
+  assert.equal(attribute(drawn[0], 'y1'), attribute(hub, 'cy'))
+  // The point itself comes back too, faded: an edge ending in blank canvas
+  // does not say which node is on the other end of it.
+  assert.equal(harness.overlay().includes('hidden.ts'), true)
+  assert.equal(circles(harness.overlay()).length > 1, true)
+})
+
+test('outbound edges are solid and inbound edges dashed', () => {
+  const harness = evaluate(renderHtml(REPORT), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  harness.point('a.ts').onmouseenter()
+  const outbound = lines(harness.overlay())
+  assert.equal(outbound.length, 1)
+  assert.equal(outbound[0].includes('stroke-dasharray'), false)
+  harness.point('a.ts').onmouseleave()
+  harness.point('b.ts').onmouseenter()
+  const inbound = lines(harness.overlay())
+  assert.equal(inbound.length, 1)
+  assert.equal(inbound[0].includes('stroke-dasharray'), true)
+})
+
+test('markup in a path cannot escape into the detail card', () => {
+  // Task 7 escaped the JSON and stopped there. The card builds innerHTML out of
+  // path, dependsOn and dependedOnBy, which is the same disk-sourced text.
+  const files = [
+    file('x<marquee>y.ts', { dependsOn: ['q<marquee>r.ts'] }),
+    file('q<marquee>r.ts', { dependedOnBy: ['x<marquee>y.ts'] }),
+  ]
+  const harness = evaluate(renderHtml(asReport(files)), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  harness.point('x<marquee>y.ts').onclick()
+  assert.equal(harness.card().includes('<marquee>'), false)
+  assert.equal(harness.card().includes('&lt;marquee&gt;'), true)
+  assert.equal(harness.card().includes('q&lt;marquee&gt;r.ts'), true)
+})
+
+test('markup in a path cannot escape into the overlay', () => {
+  const files = [
+    file('x<marquee>y.ts', { dependsOn: ['q<marquee>r.ts'] }),
+    file('q<marquee>r.ts', { dependedOnBy: ['x<marquee>y.ts'] }),
+  ]
+  const harness = evaluate(renderHtml(asReport(files)), { unit: 'file', topn: '1' })
+  harness.api.refresh()
+  harness.point(harness.api.visible()[0].path).onmouseenter()
+  assert.equal(harness.overlay().includes('<marquee>'), false)
+  assert.equal(harness.overlay().includes('&lt;marquee&gt;'), true)
+})
+
+test('switching the unit drops a focus that no longer exists', () => {
+  // refresh() rebuilds the markup but not the state behind it. A file path left
+  // in focus while the chart shows domains addresses a node that is not there.
+  const harness = evaluate(renderHtml(REPORT), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  harness.point('b.ts').onclick()
+  assert.equal(harness.api.state().focus, 'b.ts')
+  assert.equal(harness.card().length > 0, true)
+
+  harness.select('unit').value = 'domain'
+  harness.select('unit').onchange()
+  assert.equal(harness.api.state().focus, null)
+  assert.equal(harness.card(), '')
+  assert.equal(harness.overlay(), '')
+})
+
+test('focus and its overlay survive a Top N change without duplicating', () => {
+  const harness = evaluate(renderHtml(REPORT), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  harness.point('b.ts').onclick()
+  harness.point('b.ts').onmouseleave()
+  assert.equal(lines(harness.overlay()).length, 1)
+
+  harness.select('topn').value = '1'
+  harness.select('topn').onchange()
+  assert.equal(harness.api.state().focus, 'b.ts')
+  assert.equal(harness.card().length > 0, true)
+  assert.equal(lines(harness.overlay()).length, 1)
+})
+
+test('the depth control widens the radius from the card', () => {
+  const files = [
+    file('a.ts', { dependsOn: ['b.ts'] }),
+    file('b.ts', { dependsOn: ['c.ts'], dependedOnBy: ['a.ts'] }),
+    file('c.ts', { dependedOnBy: ['b.ts'] }),
+  ]
+  const harness = evaluate(renderHtml(asReport(files)), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  harness.point('a.ts').onclick()
+  assert.equal(lines(harness.overlay()).length, 1)
+  harness.depthButton('2').onclick()
+  assert.equal(harness.api.state().depth, 2)
+  assert.equal(lines(harness.overlay()).length, 2)
+  harness.depthButton('Infinity').onclick()
+  assert.equal(harness.api.state().depth, Infinity)
+  assert.equal(lines(harness.overlay()).length, 2)
+  harness.depthButton('1').onclick()
+  assert.equal(lines(harness.overlay()).length, 1)
+})
+
+test('the overlay group is emitted inside the chart, under the points', () => {
+  // SVG paints in document order, so an overlay appended last would cover the
+  // points it is annotating. It is also the reason the page can write the
+  // overlay with the same innerHTML call draw() already relies on.
+  const harness = evaluate(renderHtml(REPORT), { unit: 'file', topn: '0' })
+  harness.api.refresh()
+  const group = harness.chart().indexOf('<g id="overlay">')
+  assert.notEqual(group, -1)
+  assert.equal(group < harness.chart().indexOf('<circle'), true)
 })
