@@ -759,7 +759,27 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 4: Metrics — per file and per domain
+### Task 4: Metrics — per file and per domain — DONE, with two corrections
+
+> Review during implementation found two places where an acceptance criterion depended on
+> something a caller elsewhere had to remember — the same shape Task 3 had just removed.
+>
+> **Rows came from `Object.keys(adj)`**, so a node that is only ever a target got no row at all.
+> Measured: in 446 of 750 random open graphs, `sum(caStar) !== sum(ceStar)` — acceptance
+> criterion 2 would read BROKEN. `Object.keys(rev)` fixes it for free, since `reverse()` already
+> closes the node set, and such rows degrade into the visible `(sem dominio)` bucket.
+>
+> **`domains` sorted with `localeCompare`**, which takes the runtime default collator — pt-BR on
+> this machine, unaffected by `LANG`. It disagrees with the code-unit sort used everywhere else
+> in the same module, and a Swedish-locale machine orders `å/ä/ö` after `z`. Since the tool
+> exists to compare two runs, a report generated on another machine would diff like an
+> architectural change. Replaced by the plain sort.
+>
+> Two behaviours the plan's seven tests never pinned, both now covered: `i === 0` is a real and
+> different position from `i === null` (27 real backend files sit at exactly 0, 8 at null — a
+> guard written as `ce === 0` passes all seven tests and turns those 27 into orphans); and
+> `ce > 0` with `ceStar === 0` is **correct**, not impossible, when every direct target sits in
+> the node's own component. Ten tests, not seven.
 
 **Files:**
 - Create: `skills/coupling-map/scripts/coupling-map/metrics.mjs`
@@ -921,7 +941,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/metrics.test.mjs"
 ```
 
-Expected: `# pass 7`, `# fail 0`.
+Expected: `# pass 10`, `# fail 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1187,7 +1207,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 36 passing, 0 failing.
+Expected: 39 passing, 0 failing.
 
 - [ ] **Step 6: Commit**
 
@@ -1639,6 +1659,12 @@ Expected: FAIL — the stub returns `<title>stub</title>` and satisfies none of 
 
 - [ ] **Step 3: Write the renderer**
 
+One thing Task 4 surfaced that lands here: `i` is `null` for orphans and `0` for genuinely
+stable files, and both are falsy. `sorted()` compares with `b[key] - a[key]`, and `null - 0` is
+`0`, so sorting the table by the `i` column ties orphans with the most stable files in the
+repository. Sort `i` with nulls forced last rather than letting the subtraction decide, and
+never write `if (!row.i)` anywhere in the emitted script.
+
 The escaping in `embed` is what the last test drives: a file path is attacker-controlled only
 in the sense that it comes from disk, but `</script>` inside a JSON blob ends the block and
 turns the rest of the data into markup.
@@ -2019,7 +2045,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 45 passing, 0 failing.
+Expected: 48 passing, 0 failing.
 
 - [ ] **Step 5: Verify in the browser, dark theme first**
 
@@ -2186,7 +2212,7 @@ cd /c/angular/prompts/ia-prompts/sdd-skills
 node --test "skills/**/test/*.test.mjs"
 ```
 
-Expected: 45 passing, 0 failing.
+Expected: 48 passing, 0 failing.
 
 - [ ] **Step 3: Confirm the target project is left clean**
 
