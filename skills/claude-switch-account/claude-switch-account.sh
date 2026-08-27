@@ -96,6 +96,23 @@ identity_matches() {
   case $? in 0) return 0 ;; 1) return 1 ;; *) return 2 ;; esac
 }
 
+other_session_count() {
+  command -v pgrep >/dev/null 2>&1 || return 1
+  local mine pid found=0 n=0
+  mine=" "
+  pid=$$
+  while [ -n "$pid" ] && [ "$pid" != "0" ] && [ "$pid" != "1" ]; do
+    mine="$mine$pid "
+    pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+  done
+  for p in $(pgrep -x claude 2>/dev/null; pgrep -f 'claude-code' 2>/dev/null); do
+    case "$mine" in *" $p "*) continue ;; esac
+    n=$((n+1)); found=1
+  done
+  [ "$found" -eq 1 ] || n=0
+  echo "$n"
+}
+
 hash_stdin() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1
   elif command -v shasum >/dev/null 2>&1; then shasum -a 256 | cut -d' ' -f1
@@ -127,6 +144,10 @@ mkdir -p "$STORE" "$IDENTITY_DIR"; chmod 700 "$STORE" "$IDENTITY_DIR" 2>/dev/nul
 [ "$OS" = "Darwin" ] && echo "NOTA: caminho macOS (Keychain) ainda nao validado em hardware Apple - confira o resultado" >&2
 
 case "${1:-}" in
+  --sessions)
+    if n="$(other_session_count)"; then echo "outras-sessoes:$n"; else echo "indeterminado"; fi
+    exit 0
+    ;;
   --status)
     live_read | valid_json || { echo "sem-credenciais"; exit 0; }
     [ -n "$(saved_accounts)" ] || { echo "sem-cadastro"; exit 0; }
@@ -171,7 +192,7 @@ case "${1:-}" in
     echo "conta '$name' salva e marcada como ativa"; exit 0
     ;;
   ""|--help|-h)
-    echo "uso: claude-switch-account.sh --status | --list | --save <nome> | <nome>"; exit 0
+    echo "uso: claude-switch-account.sh --sessions | --status | --list | --save <nome> | <nome>"; exit 0
     ;;
 esac
 

@@ -4,7 +4,8 @@ param(
     [string]$Account,
     [switch]$Save,
     [switch]$List,
-    [switch]$Status
+    [switch]$Status,
+    [switch]$Sessions
 )
 
 $ErrorActionPreference = 'Stop'
@@ -91,6 +92,22 @@ function Test-IdentityMatches([string]$Name) {
     return $null
 }
 
+function Get-OtherSessionCount {
+    try {
+        $mine = @()
+        $p = Get-CimInstance Win32_Process -Filter "ProcessId=$PID" -ErrorAction Stop
+        while ($p) {
+            $mine += $p.ProcessId
+            if (-not $p.ParentProcessId -or $p.ParentProcessId -eq 0) { break }
+            $p = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)" -ErrorAction SilentlyContinue
+        }
+        $all = @(Get-CimInstance Win32_Process -Filter "Name='claude.exe'" -ErrorAction Stop)
+        return @($all | Where-Object { $mine -notcontains $_.ProcessId }).Count
+    } catch {
+        return -1
+    }
+}
+
 function Get-SavedAccounts {
     if (-not (Test-Path $Store)) { return @() }
     Get-ChildItem -Path $Store -Filter '*.json' -File |
@@ -99,6 +116,12 @@ function Get-SavedAccounts {
 }
 
 New-Item -ItemType Directory -Force -Path $Store, $IdentityDir | Out-Null
+
+if ($Sessions) {
+    $n = Get-OtherSessionCount
+    if ($n -lt 0) { Write-Output 'indeterminado' } else { Write-Output "outras-sessoes:$n" }
+    exit 0
+}
 
 if ($Status) {
     if (-not (Test-CredFile $Cred)) { Write-Output 'sem-credenciais'; exit 0 }

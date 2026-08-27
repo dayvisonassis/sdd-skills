@@ -20,9 +20,9 @@ plugins stay shared. Only the credentials file changes.
 | Windows | `powershell -NoProfile -File <skill-dir>/claude-switch-account.ps1` |
 | Linux, macOS | `bash <skill-dir>/claude-switch-account.sh` |
 
-Flags differ by convention: `-Status` / `-List` / `-Save -Account <name>` /
-`-Account <name>` on PowerShell, `--status` / `--list` / `--save <name>` /
-`<name>` on bash.
+Flags differ by convention: `-Sessions` / `-Status` / `-List` /
+`-Save -Account <name>` / `-Account <name>` on PowerShell, `--sessions` /
+`--status` / `--list` / `--save <name>` / `<name>` on bash.
 
 Snapshots are always plain files under the store on every platform. Only the
 *live* credential location differs: a file on Windows and Linux, the login
@@ -43,7 +43,18 @@ Keychain on macOS.
 | `sem-identidade:<name>` | No identity snapshot for that account, or it cannot be compared. |
 | `indeterminado:<name>` | No SHA-256 tool available; the comparison could not run. |
 
-2. **On `diverge:<name>`, ask - never guess.** Two different events produce it and
+2. **Run the sessions command before activating anything.** It prints
+   `outras-sessoes:N` - live Claude processes outside this one's own ancestry -
+   or `indeterminado` when it cannot tell.
+
+   If N is above zero, **stop and ask the user before switching.** Explain what
+   they are choosing (see the next section), and do not proceed on your own
+   judgement. `indeterminado` is not a green light: say the check could not run.
+
+   N counts processes, not people. One editor window can account for more than
+   one, so treat it as "something else is running", never as an exact tally.
+
+3. **On `diverge:<name>`, ask - never guess.** Two different events produce it and
    they cannot be told apart without reading the token, which this skill does not do:
 
    - the *same* account with a token refreshed mid-session, or
@@ -54,18 +65,41 @@ Keychain on macOS.
    wrong way overwrites a working snapshot, and the user loses browser-free access
    to that account - the exact thing this skill exists to provide.
 
-3. On `sem-cadastro`, offer to register the logged-in account before anything else.
+4. On `sem-cadastro`, offer to register the logged-in account before anything else.
 
-4. Run the list command and **offer a menu**. Registered accounts come first, in
+5. Run the list command and **offer a menu**. Registered accounts come first, in
    the order listed, and `Register a new account` is always the last option. With
    three or fewer accounts use the interactive question tool; above that its option
    cap is exceeded, so print a numbered list and ask the user to pick.
    Skip the menu only if the user already named the account when invoking.
 
-5. Chosen an existing account: run the activate command for that name.
+6. Chosen an existing account: run the activate command for that name.
    Chosen `Register a new account`: follow **Registering** below.
 
-6. Report the result and tell the user to reopen with `claude --continue`.
+7. Report the result and tell the user to reopen with `claude --continue`.
+
+## Another live session will undo the switch
+
+Every Claude process on the machine reads and writes the same two files. They
+are neither isolated from each other nor synchronised with each other, which is
+the worst of both:
+
+- A process already running keeps its old token, held in memory. Switching does
+  not disturb it, and it does not disturb the switch - yet.
+- When that process refreshes its token, it writes its own credentials back to
+  the shared file, **silently reverting the switch**. It writes to
+  `~/.claude.json` in normal use too, so the identity can be reverted the same
+  way.
+
+So the risk is not that the other session breaks. It is that the switch quietly
+comes undone, leaving a state nobody can read: `--status` will say `diverge` and
+the user will not know why.
+
+Tell the user this and let them decide. Waiting until the other session is
+closed is the clean answer. Genuinely concurrent sessions on different accounts
+need separate `CLAUDE_CONFIG_DIR` values, not this skill - and note that whether
+`CLAUDE_CONFIG_DIR` also relocates `~/.claude.json` is **unverified**; if it does
+not, two instances still collide over the identity.
 
 ## An account is two things, not one
 
@@ -186,6 +220,7 @@ verify the result before trusting it, and report back so this notice can go.
 | macOS: cannot read credentials | Wrong Keychain service or account. See macOS specifics. |
 | Restarted, still shows the old account | Either the wrong process was restarted (see the host table) or the identity did not move - run status. |
 | `identidade-divergente` | Token and identity disagree. Switch again to the intended account to reconcile both. |
+| Switched, and later it is back on the old account | Another live session refreshed its token over the shared file. See the section above. |
 | `AVISO ... (sem-python)` | No usable Python 3. The token moved, the identity did not; every screen will name the old account. |
 
 ## Not for
