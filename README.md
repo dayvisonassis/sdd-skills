@@ -182,7 +182,10 @@ and ready-made recipes (greenfield, brownfield, batch).
   **not** part of an installed skill: everything a skill needs to run lives in its own folder.
 - **`claude-switch-account` ships one script per platform** (PowerShell and POSIX shell) and
   is the only skill here that touches credentials. It swaps saved copies of the credential
-  store so switching accounts skips the browser; it never reads or transmits a token. The
+  store so switching accounts skips the browser; it never reads or transmits a token.
+  An account is two records - the OAuth token and the identity in `~/.claude.json` - and
+  both move together, so it needs a working Python 3 (PowerShell 5.1 cannot parse real
+  state files: they contain project keys differing only in case). The
   Linux path is verified on ext4, the Windows path on NTFS, and the **macOS Keychain path has
   only ever run against a stubbed `security` command** - the first Mac user should confirm it
   and drop the warning the skill prints. A wrong Keychain item name fails safe: it cannot

@@ -19,6 +19,11 @@ else { $Store = Join-Path $env:USERPROFILE '.claude-accounts' }
 
 $Marker = Join-Path $Store '.active'
 
+if ($env:CLAUDE_STATE_FILE) { $State = $env:CLAUDE_STATE_FILE }
+else { $State = Join-Path $env:USERPROFILE '.claude.json' }
+
+$IdentityKeys = @('userID', 'oauthAccount')
+
 function Fail([string]$Message) {
     Write-Output "ERRO: $Message"
     exit 1
@@ -36,6 +41,56 @@ function Test-CredFile([string]$Path) {
     return $true
 }
 
+function Get-PythonExe {
+    foreach ($c in @('python3', 'python')) {
+        $cmd = Get-Command $c -ErrorAction SilentlyContinue
+        if (-not $cmd) { continue }
+        & $cmd.Source -c 'pass' 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { return $cmd.Source }
+    }
+    return $null
+}
+
+$PyExe = Get-PythonExe
+$IdentityPy = Join-Path $PSScriptRoot 'identity.py'
+
+function Invoke-Identity([string[]]$IdArgs) {
+    if (-not $PyExe) { return 99 }
+    if (-not (Test-Path $IdentityPy)) { return 98 }
+    & $PyExe $IdentityPy @IdArgs 2>$null | Out-Null
+    return $LASTEXITCODE
+}
+
+$IdentityDir = Join-Path $Store 'identities'
+function Get-IdentityPath([string]$Name) { Join-Path $IdentityDir "$Name.json" }
+
+function Save-Identity([string]$Dest) {
+    return (Invoke-Identity @('extract', $State, $Dest)) -eq 0
+}
+
+function Apply-Identity([string]$Src) {
+    if (-not (Test-Path $Src)) { return 'sem-identidade' }
+    $rc = Invoke-Identity @('apply', $State, $Src, (Join-Path $Store '_backup-state.json'))
+    switch ($rc) {
+        0  { return 'ok' }
+        2  { return 'estado-ilegivel' }
+        3  { return 'identidade-invalida' }
+        4  { return 'escrita-falhou' }
+        98 { return 'helper-ausente' }
+        99 { return 'sem-python' }
+        default { return "erro-$rc" }
+    }
+}
+
+function Test-IdentityMatches([string]$Name) {
+    $snap = Get-IdentityPath $Name
+    if (-not (Test-Path $snap)) { return $null }
+    $rc = Invoke-Identity @('compare', $State, $snap)
+    if ($rc -eq 0) { return $true }
+    if ($rc -eq 1) { return $false }
+    return $null
+}
+
 function Get-SavedAccounts {
     if (-not (Test-Path $Store)) { return @() }
     Get-ChildItem -Path $Store -Filter '*.json' -File |
@@ -43,7 +98,7 @@ function Get-SavedAccounts {
         ForEach-Object { $_.BaseName }
 }
 
-New-Item -ItemType Directory -Force -Path $Store | Out-Null
+New-Item -ItemType Directory -Force -Path $Store, $IdentityDir | Out-Null
 
 if ($Status) {
     if (-not (Test-CredFile $Cred)) { Write-Output 'sem-credenciais'; exit 0 }
@@ -54,7 +109,11 @@ if ($Status) {
     if (-not (Test-CredFile $snap)) { Write-Output "diverge:$active"; exit 0 }
     $h1 = (Get-FileHash -Path $Cred -Algorithm SHA256).Hash
     $h2 = (Get-FileHash -Path $snap -Algorithm SHA256).Hash
-    if ($h1 -eq $h2) { Write-Output "confere:$active" } else { Write-Output "diverge:$active" }
+    if ($h1 -ne $h2) { Write-Output "diverge:$active"; exit 0 }
+    $idOk = Test-IdentityMatches $active
+    if ($null -eq $idOk) { Write-Output "sem-identidade:$active" }
+    elseif ($idOk) { Write-Output "confere:$active" }
+    else { Write-Output "identidade-divergente:$active" }
     exit 0
 }
 
@@ -74,8 +133,10 @@ if ($Save) {
     if (-not $Account) { Fail 'informe o nome: -Save -Account <nome>' }
     if (-not (Test-CredFile $Cred)) { Fail "credenciais ativas ausentes ou invalidas em $Cred - faca login primeiro" }
     Copy-Item $Cred (Join-Path $Store "$Account.json") -Force
+    $idSaved = Save-Identity (Get-IdentityPath $Account)
     Set-Content -Path $Marker -Value $Account -NoNewline
     Write-Output "conta '$Account' salva e marcada como ativa"
+    if (-not $idSaved) { Write-Output "AVISO: identidade nao encontrada em $State - a troca vai levar so o token" }
     exit 0
 }
 
@@ -89,13 +150,20 @@ if ($active -eq $Account) { Write-Output "conta '$Account' ja esta ativa"; exit 
 
 if (Test-CredFile $Cred) {
     Copy-Item $Cred (Join-Path $Store '_backup-anterior.json') -Force
-    if ($active) { Copy-Item $Cred (Join-Path $Store "$active.json") -Force }
+    if ($active) {
+        Copy-Item $Cred (Join-Path $Store "$active.json") -Force
+        Save-Identity (Get-IdentityPath $active) | Out-Null
+    }
 }
 
 Copy-Item $target $Cred -Force
+$idResult = Apply-Identity (Get-IdentityPath $Account)
 Set-Content -Path $Marker -Value $Account -NoNewline
 
 Write-Output "conta '$Account' ativa"
+if ($idResult -ne 'ok') {
+    Write-Output "AVISO: o token trocou mas a identidade NAO ($idResult) - o app vai exibir a conta antiga"
+}
 if (-not $active) {
     Write-Output 'AVISO: a conta anterior nao estava registrada; snapshot bruto em _backup-anterior.json'
 }

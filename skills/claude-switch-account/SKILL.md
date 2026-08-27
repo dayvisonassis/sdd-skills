@@ -39,7 +39,9 @@ Keychain on macOS.
    | `sem-ativa` | Snapshots exist but none is marked active. |
    | `confere:<name>` | The live credentials are the `<name>` snapshot, unchanged. |
    | `diverge:<name>` | The live credentials differ from the `<name>` snapshot. |
-   | `indeterminado:<name>` | No SHA-256 tool available; the comparison could not run. |
+   | `identidade-divergente:<name>` | Token matches, but the identity record does not. |
+| `sem-identidade:<name>` | No identity snapshot for that account, or it cannot be compared. |
+| `indeterminado:<name>` | No SHA-256 tool available; the comparison could not run. |
 
 2. **On `diverge:<name>`, ask - never guess.** Two different events produce it and
    they cannot be told apart without reading the token, which this skill does not do:
@@ -65,6 +67,35 @@ Keychain on macOS.
 
 6. Report the result and tell the user to reopen with `claude --continue`.
 
+## An account is two things, not one
+
+Claude Code splits the account across two files:
+
+| File | Holds |
+|---|---|
+| `~/.claude/.credentials.json` | the OAuth token |
+| `~/.claude.json` | the identity: `userID` and `oauthAccount` (email, org, seat tier) |
+
+Swapping only the token leaves the app **authenticated as one account and
+displaying another** - the usage panel keeps showing the old email, and the two
+records disagree. So a switch moves both, and `--save` snapshots both:
+credentials to `<store>/<name>.json`, identity to
+`<store>/identities/<name>.json`.
+
+`~/.claude.json` also holds unrelated state (project history, flags), which is
+never swapped. Only `userID` and `oauthAccount` are patched in place, the file
+is backed up to `_backup-state.json` first, and the write is atomic.
+
+**This needs a working Python 3.** Not a style choice: PowerShell 5.1's
+`ConvertFrom-Json` builds a case-insensitive map and aborts on real state files,
+which do contain project keys differing only in case (`C:/...` and `c:/...`).
+Presence is not enough either - macOS ships a `python3` stub that fails until
+the Command Line Tools are installed, so the interpreter is probed before use.
+
+Without a usable Python the token still switches, and the skill says loudly that
+the identity did not. Report that verbatim; the user is then logged in as the
+new account while every screen names the old one.
+
 ## What `--continue` does and does not preserve
 
 The swap does not affect the running process - its token is already in memory.
@@ -78,6 +109,19 @@ promising nothing changes.
 
 The prompt cache is lost either way, including via the built-in
 `/switch account`, because it is scoped per account.
+
+### Which process to restart depends on the host
+
+| Host | How to pick up the new account |
+|---|---|
+| Terminal | Exit the session, then `claude --continue` |
+| VS Code extension | Restart VS Code |
+
+This distinction is not cosmetic. Running `claude --continue` in VS Code's
+integrated terminal does **not** switch the extension's account: it starts a
+second, independent Claude beside it. The user then has two sessions live on two
+different accounts, and the panel - which belongs to the extension - keeps
+showing the old one. Name the host before telling anyone what to restart.
 
 ## Registering
 
@@ -106,6 +150,10 @@ registration cannot pass unnoticed.
 - On Linux and macOS, stored snapshots are `chmod 600` and the store is `700`.
 - Aborts instead of switching if the outgoing account's credentials cannot be
   read, so a token is never silently dropped.
+- Backs up `~/.claude.json` before patching it, writes atomically, and validates
+  the result parses before replacing the original.
+- Identity snapshots live in their own `identities/` directory, so they can
+  never be listed as accounts nor activated over a credentials file.
 
 ## macOS specifics - READ BEFORE RELYING ON IT
 
@@ -136,6 +184,9 @@ verify the result before trusting it, and report back so this notice can go.
 | `diverge:` and the user is unsure | Ask when they last logged in. If they did not, it is a refreshed token. |
 | `[INVALIDA]` next to a name | That snapshot is corrupt. Log into it and save again. |
 | macOS: cannot read credentials | Wrong Keychain service or account. See macOS specifics. |
+| Restarted, still shows the old account | Either the wrong process was restarted (see the host table) or the identity did not move - run status. |
+| `identidade-divergente` | Token and identity disagree. Switch again to the intended account to reconcile both. |
+| `AVISO ... (sem-python)` | No usable Python 3. The token moved, the identity did not; every screen will name the old account. |
 
 ## Not for
 
