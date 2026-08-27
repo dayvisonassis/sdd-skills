@@ -39,7 +39,8 @@ Keychain on macOS.
    | `sem-ativa` | Snapshots exist but none is marked active. |
    | `confere:<name>` | The live credentials are the `<name>` snapshot, unchanged. |
    | `diverge:<name>` | The live credentials differ from the `<name>` snapshot. |
-   | `identidade-divergente:<name>` | Token matches, but the identity record does not. |
+   | `marcador-desatualizado:<real>` | The live account is `<real>`, not what the marker says. |
+| `identidade-divergente:<name>` | Token matches, but the identity record does not. |
 | `sem-identidade:<name>` | No identity snapshot for that account, or it cannot be compared. |
 | `indeterminado:<name>` | No SHA-256 tool available; the comparison could not run. |
 
@@ -77,6 +78,40 @@ Keychain on macOS.
    Chosen `Register a new account`: follow **Registering** below.
 
 7. Report the result and tell the user to reopen with `claude --continue`.
+
+## The marker is a record, not the truth
+
+`<store>/.active` records the last account **this tool** activated. It says
+nothing about what happened afterwards, and it goes stale the moment someone
+switches by any other means - the built-in `/switch account`, a fresh login, a
+different machine syncing in. Doing that is normal and correct; people do it
+when the tool is not at hand.
+
+So the marker is never used to decide which account is live. The identity is:
+it is written by whoever logged in and it survives token refresh, unlike the
+token itself. `whoami` compares the live identity against every registered
+identity snapshot and names the match.
+
+This matters at exactly one place, and it is destructive if got wrong. Before
+switching, the outgoing account's snapshot is refreshed so a token renewed
+mid-session is not lost. Choosing that account by the marker means that when the
+marker is stale, **the live credentials are written into a different account's
+snapshot** - the other account's saved login is destroyed, and `_backup-anterior`
+holds the same wrong content, so nothing recovers it. Only another browser login
+would.
+
+Two consequences follow:
+
+- The outgoing snapshot is written to the *identified* account. When that differs
+  from the marker, the skill says so rather than hiding the correction.
+- When the live account cannot be identified - no identity snapshot yet, more
+  than one match, no usable Python - **no snapshot is rewritten at all.** Losing
+  a refreshed token costs one browser login later; writing over the wrong
+  snapshot costs one now, and silently.
+
+The same rule governs "this account is already active": that is answered from
+the identity too, since a stale marker would otherwise make the skill decline a
+switch that genuinely needs to happen.
 
 ## Another live session will undo the switch
 
@@ -220,6 +255,7 @@ verify the result before trusting it, and report back so this notice can go.
 | macOS: cannot read credentials | Wrong Keychain service or account. See macOS specifics. |
 | Restarted, still shows the old account | Either the wrong process was restarted (see the host table) or the identity did not move - run status. |
 | `identidade-divergente` | Token and identity disagree. Switch again to the intended account to reconcile both. |
+| `marcador-desatualizado` | Someone switched outside this tool. Not an error - switching again reconciles it. |
 | Switched, and later it is back on the old account | Another live session refreshed its token over the shared file. See the section above. |
 | `AVISO ... (sem-python)` | No usable Python 3. The token moved, the identity did not; every screen will name the old account. |
 
