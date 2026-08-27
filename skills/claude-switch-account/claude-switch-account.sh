@@ -46,6 +46,12 @@ valid_json() {
 
 valid_file() { [ -f "$1" ] && valid_json < "$1"; }
 
+hash_stdin() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 | cut -d' ' -f1
+  else echo NOHASH; fi
+}
+
 active_name() { [ -f "$MARKER" ] && tr -d '[:space:]' < "$MARKER" || true; }
 
 saved_accounts() {
@@ -71,6 +77,18 @@ mkdir -p "$STORE"; chmod 700 "$STORE" 2>/dev/null
 [ "$OS" = "Darwin" ] && echo "NOTA: caminho macOS (Keychain) ainda nao validado em hardware Apple - confira o resultado" >&2
 
 case "${1:-}" in
+  --status)
+    live_read | valid_json || { echo "sem-credenciais"; exit 0; }
+    [ -n "$(saved_accounts)" ] || { echo "sem-cadastro"; exit 0; }
+    a="$(active_name)"
+    [ -n "$a" ] || { echo "sem-ativa"; exit 0; }
+    valid_file "$STORE/$a.json" || { echo "diverge:$a"; exit 0; }
+    h1="$(live_read | hash_stdin)"; h2="$(hash_stdin < "$STORE/$a.json")"
+    if [ "$h1" = "NOHASH" ]; then echo "indeterminado:$a"
+    elif [ "$h1" = "$h2" ]; then echo "confere:$a"
+    else echo "diverge:$a"; fi
+    exit 0
+    ;;
   --list)
     a="$(active_name)"; found=0
     while read -r n; do
@@ -95,7 +113,7 @@ case "${1:-}" in
     echo "conta '$name' salva e marcada como ativa"; exit 0
     ;;
   ""|--help|-h)
-    echo "uso: claude-switch-account.sh --list | --save <nome> | <nome>"; exit 0
+    echo "uso: claude-switch-account.sh --status | --list | --save <nome> | <nome>"; exit 0
     ;;
 esac
 

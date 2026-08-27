@@ -20,8 +20,9 @@ plugins stay shared. Only the credentials file changes.
 | Windows | `powershell -NoProfile -File <skill-dir>/claude-switch-account.ps1` |
 | Linux, macOS | `bash <skill-dir>/claude-switch-account.sh` |
 
-Flags differ by convention: `-List` / `-Save -Account <name>` / `-Account <name>`
-on PowerShell, `--list` / `--save <name>` / `<name>` on bash.
+Flags differ by convention: `-Status` / `-List` / `-Save -Account <name>` /
+`-Account <name>` on PowerShell, `--status` / `--list` / `--save <name>` /
+`<name>` on bash.
 
 Snapshots are always plain files under the store on every platform. Only the
 *live* credential location differs: a file on Windows and Linux, the login
@@ -29,16 +30,40 @@ Keychain on macOS.
 
 ## Steps
 
-1. Run the list command. It prints the saved accounts, marking the active one
-   with `*` and any unreadable snapshot with `[INVALIDA]`.
-2. **Offer a menu.** Registered accounts come first, in the order listed, and
-   `Register a new account` is always the last option. With three or fewer
-   accounts use the interactive question tool; above that its option cap is
-   exceeded, so print a numbered list and ask the user to pick.
+1. **Run the status command first.** It prints exactly one token:
+
+   | Output | Meaning |
+   |---|---|
+   | `sem-credenciais` | Nobody is logged in. Nothing to do but log in. |
+   | `sem-cadastro` | Someone is logged in, no account is registered yet. |
+   | `sem-ativa` | Snapshots exist but none is marked active. |
+   | `confere:<name>` | The live credentials are the `<name>` snapshot, unchanged. |
+   | `diverge:<name>` | The live credentials differ from the `<name>` snapshot. |
+   | `indeterminado:<name>` | No SHA-256 tool available; the comparison could not run. |
+
+2. **On `diverge:<name>`, ask - never guess.** Two different events produce it and
+   they cannot be told apart without reading the token, which this skill does not do:
+
+   - the *same* account with a token refreshed mid-session, or
+   - a *different* account the user just logged into.
+
+   Ask which it was. Same account -> save again under `<name>`. Different account
+   -> register it under a new name. Guessing "different account" and re-saving the
+   wrong way overwrites a working snapshot, and the user loses browser-free access
+   to that account - the exact thing this skill exists to provide.
+
+3. On `sem-cadastro`, offer to register the logged-in account before anything else.
+
+4. Run the list command and **offer a menu**. Registered accounts come first, in
+   the order listed, and `Register a new account` is always the last option. With
+   three or fewer accounts use the interactive question tool; above that its option
+   cap is exceeded, so print a numbered list and ask the user to pick.
    Skip the menu only if the user already named the account when invoking.
-3. Chosen an existing account: run the activate command for that name.
-4. Chosen `Register a new account`: follow **Registering** below.
-5. Report the result and tell the user to reopen with `claude --continue`.
+
+5. Chosen an existing account: run the activate command for that name.
+   Chosen `Register a new account`: follow **Registering** below.
+
+6. Report the result and tell the user to reopen with `claude --continue`.
 
 ## What `--continue` does and does not preserve
 
@@ -59,8 +84,16 @@ The prompt cache is lost either way, including via the built-in
 1. If an account is currently logged in and unsaved, save it first:
    `-Save -Account <name>` / `--save <name>`.
 2. Ask the user to run `/switch account` and log into the account being added.
-   This is the only time the browser is needed for that account.
+   This is the only time the browser is needed for that account, and it is the
+   one step this skill cannot perform: `/switch account` is a client command, not
+   an agent tool, and the OAuth flow needs a human at a browser by design. Say so
+   plainly rather than leaving the user wondering why the skill stopped.
 3. Once logged in, save it under its name.
+
+The user may not come back to say they are done - the login can restart the
+session. That is what step 1's status check is for: on the next invocation
+`diverge:<name>` surfaces the unregistered login on its own, so a half-finished
+registration cannot pass unnoticed.
 
 ## Guarantees
 
@@ -100,6 +133,7 @@ verify the result before trusting it, and report back so this notice can go.
 | Switched, still on the old account | The process was not reopened. Run `claude --continue`. |
 | Asks for login despite a saved account | Snapshot too old, refresh token expired. Run `/switch account` once, then save again. |
 | List shows nothing | No account registered yet. See Registering. |
+| `diverge:` and the user is unsure | Ask when they last logged in. If they did not, it is a refreshed token. |
 | `[INVALIDA]` next to a name | That snapshot is corrupt. Log into it and save again. |
 | macOS: cannot read credentials | Wrong Keychain service or account. See macOS specifics. |
 

@@ -3,7 +3,8 @@ param(
     [Parameter(Position = 0)]
     [string]$Account,
     [switch]$Save,
-    [switch]$List
+    [switch]$List,
+    [switch]$Status
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,6 +44,19 @@ function Get-SavedAccounts {
 }
 
 New-Item -ItemType Directory -Force -Path $Store | Out-Null
+
+if ($Status) {
+    if (-not (Test-CredFile $Cred)) { Write-Output 'sem-credenciais'; exit 0 }
+    if (@(Get-SavedAccounts).Count -eq 0) { Write-Output 'sem-cadastro'; exit 0 }
+    $active = Get-ActiveName
+    if (-not $active) { Write-Output 'sem-ativa'; exit 0 }
+    $snap = Join-Path $Store "$active.json"
+    if (-not (Test-CredFile $snap)) { Write-Output "diverge:$active"; exit 0 }
+    $h1 = (Get-FileHash -Path $Cred -Algorithm SHA256).Hash
+    $h2 = (Get-FileHash -Path $snap -Algorithm SHA256).Hash
+    if ($h1 -eq $h2) { Write-Output "confere:$active" } else { Write-Output "diverge:$active" }
+    exit 0
+}
 
 if ($List) {
     $active = Get-ActiveName
