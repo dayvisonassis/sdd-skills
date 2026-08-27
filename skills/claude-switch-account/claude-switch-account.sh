@@ -133,7 +133,23 @@ hash_stdin() {
   else echo NOHASH; fi
 }
 
-active_name() { [ -f "$MARKER" ] && tr -d '[:space:]' < "$MARKER" || true; }
+active_name() {
+  [ -f "$MARKER" ] || return 0
+  local v; v="$(cat "$MARKER")"
+  v="${v#"${v%%[![:space:]]*}"}"
+  v="${v%"${v##*[![:space:]]}"}"
+  printf '%s' "$v"
+}
+
+valid_name() {
+  case "$1" in
+    "" ) return 1 ;;
+    _* ) return 1 ;;
+    *"/"*|*"\\"* ) return 1 ;;
+  esac
+  case "$1" in *[[:cntrl:]]* ) return 1 ;; esac
+  return 0
+}
 
 saved_accounts() {
   [ -d "$STORE" ] || return 0
@@ -195,6 +211,7 @@ case "${1:-}" in
     ;;
   --save)
     name="${2:-}"; [ -n "$name" ] || fail "informe o nome: --save <nome>"
+    valid_name "$name" || fail "nome invalido: '$name' - sem barras, sem caracteres de controle, e nao pode comecar com _"
     snapshot_live "$STORE/$name.json" || {
       rm -f "$STORE/$name.json"
       if [ "$OS" = "Darwin" ]; then
@@ -214,6 +231,7 @@ case "${1:-}" in
 esac
 
 name="$1"
+valid_name "$name" || fail "nome invalido: '$name' - sem barras, sem caracteres de controle, e nao pode comecar com _"
 target="$STORE/$name.json"
 valid_file "$target" || fail "conta '$name' nao esta salva ou o arquivo esta invalido - use --list"
 
