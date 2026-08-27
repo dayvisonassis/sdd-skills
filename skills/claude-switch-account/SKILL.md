@@ -151,6 +151,15 @@ records disagree. So a switch moves both, and `--save` snapshots both:
 credentials to `<store>/<name>.json`, identity to
 `<store>/identities/<name>.json`.
 
+**What moves and what identifies are not the same set.** The whole
+`oauthAccount` moves, but only `userID`, `accountUuid` and `organizationUuid`
+identify an account. `oauthAccount` also carries `profileFetchedAt`, a timestamp
+the app rewrites whenever it revalidates the profile - compare the whole object
+and an account stops recognising itself minutes later, for no reason a user
+could ever guess. Matching ignores anything that moves on its own, and a record
+with none of the stable fields is treated as unidentifiable rather than matching
+every other record that also lacks them.
+
 `~/.claude.json` also holds unrelated state (project history, flags), which is
 never swapped. Only `userID` and `oauthAccount` are patched in place, the file
 is backed up to `_backup-state.json` first, and the write is atomic.
