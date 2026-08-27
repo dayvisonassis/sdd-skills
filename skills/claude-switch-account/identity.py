@@ -18,6 +18,32 @@ import sys
 
 KEYS = ("userID", "oauthAccount")
 
+# What MOVES is the whole record above. What IDENTIFIES is only the stable part
+# below. oauthAccount carries profileFetchedAt, a timestamp the app rewrites
+# whenever it revalidates the profile, so comparing the whole object makes an
+# account stop recognising itself minutes later.
+ACCOUNT_FIELDS = ("accountUuid", "organizationUuid")
+
+
+def fingerprint(data):
+    """Identity of the account, ignoring anything that changes on its own."""
+    acct = data.get("oauthAccount") or {}
+    return json.dumps(
+        [data.get("userID")] + [acct.get(f) for f in ACCOUNT_FIELDS],
+        sort_keys=True,
+    )
+
+
+def identifiable(data):
+    """False when there is nothing stable to match on.
+
+    Without this, two records that both lack the fields would fingerprint the
+    same and be declared the same account.
+    """
+    acct = data.get("oauthAccount") or {}
+    return any(acct.get(f) for f in ACCOUNT_FIELDS) or bool(data.get("userID"))
+
+
 
 def load(path):
     with open(path, encoding="utf-8") as fh:
@@ -86,10 +112,9 @@ def compare(state, snap):
         ident = load(snap)
     except Exception:
         return 2
-    for k in KEYS:
-        if json.dumps(data.get(k), sort_keys=True) != json.dumps(ident.get(k), sort_keys=True):
-            return 1
-    return 0
+    if not identifiable(data) or not identifiable(ident):
+        return 2
+    return 0 if fingerprint(data) == fingerprint(ident) else 1
 
 
 def whoami(state, identities_dir):
@@ -107,6 +132,8 @@ def whoami(state, identities_dir):
         data = load(state)
     except Exception:
         return 2
+    if not identifiable(data):
+        return 1
     try:
         names = sorted(os.listdir(identities_dir))
     except Exception:
@@ -119,11 +146,9 @@ def whoami(state, identities_dir):
             ident = load(os.path.join(identities_dir, fn))
         except Exception:
             continue
-        same = all(
-            json.dumps(data.get(k), sort_keys=True) == json.dumps(ident.get(k), sort_keys=True)
-            for k in KEYS
-        )
-        if same:
+        if not identifiable(ident):
+            continue
+        if fingerprint(data) == fingerprint(ident):
             matches.append(fn[:-5])
     if len(matches) != 1:
         return 1
