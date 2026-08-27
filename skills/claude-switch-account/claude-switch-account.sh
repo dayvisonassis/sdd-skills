@@ -8,6 +8,8 @@ STORE="${CLAUDE_ACCOUNTS_DIR:-$HOME/.claude-accounts}"
 MARKER="$STORE/.active"
 KC_SERVICE="${CLAUDE_KEYCHAIN_SERVICE:-Claude Code-credentials}"
 KC_ACCOUNT="${CLAUDE_KEYCHAIN_ACCOUNT:-$USER}"
+STATE="${CLAUDE_STATE_FILE:-$HOME/.claude.json}"
+IDENTITY_PY="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/identity.py"
 
 fail() { echo "ERRO: $*"; exit 1; }
 
@@ -34,10 +36,10 @@ live_write() {
 }
 
 valid_json() {
-  local data; data="$(cat)"
+  local data py; data="$(cat)"
   [ "${#data}" -ge 50 ] || return 1
-  if command -v python3 >/dev/null 2>&1; then
-    printf '%s' "$data" | python3 -c 'import json,sys; json.load(sys.stdin)' >/dev/null 2>&1 || return 1
+  if py="$(py_exe)"; then
+    printf '%s' "$data" | "$py" -c 'import json,sys; json.load(sys.stdin)' >/dev/null 2>&1 || return 1
   else
     case "$data" in '{'*) ;; *) return 1 ;; esac
   fi
@@ -45,6 +47,54 @@ valid_json() {
 }
 
 valid_file() { [ -f "$1" ] && valid_json < "$1"; }
+
+PY_EXE_CACHE=""
+py_exe() {
+  if [ -z "$PY_EXE_CACHE" ]; then
+    PY_EXE_CACHE="none"
+    for c in python3 python; do
+      if command -v "$c" >/dev/null 2>&1 && "$c" -c 'pass' >/dev/null 2>&1; then
+        PY_EXE_CACHE="$c"; break
+      fi
+    done
+  fi
+  [ "$PY_EXE_CACHE" != "none" ] || return 1
+  echo "$PY_EXE_CACHE"
+}
+
+invoke_identity() {
+  local py
+  py="$(py_exe)" || return 99
+  [ -n "$py" ] || return 99
+  [ -f "$IDENTITY_PY" ] || return 98
+  "$py" "$IDENTITY_PY" "$@" >/dev/null 2>&1
+}
+
+IDENTITY_DIR="$STORE/identities"
+identity_path() { echo "$IDENTITY_DIR/$1.json"; }
+
+save_identity() { invoke_identity extract "$STATE" "$1"; }
+
+apply_identity() {
+  [ -f "$1" ] || { echo "sem-identidade"; return; }
+  invoke_identity apply "$STATE" "$1" "$STORE/_backup-state.json"
+  case $? in
+    0)  echo ok ;;
+    2)  echo estado-ilegivel ;;
+    3)  echo identidade-invalida ;;
+    4)  echo escrita-falhou ;;
+    98) echo helper-ausente ;;
+    99) echo sem-python ;;
+    *)  echo erro ;;
+  esac
+}
+
+identity_matches() {
+  local snap; snap="$(identity_path "$1")"
+  [ -f "$snap" ] || return 2
+  invoke_identity compare "$STATE" "$snap"
+  case $? in 0) return 0 ;; 1) return 1 ;; *) return 2 ;; esac
+}
 
 hash_stdin() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1
@@ -72,7 +122,7 @@ snapshot_live() {
   return 0
 }
 
-mkdir -p "$STORE"; chmod 700 "$STORE" 2>/dev/null
+mkdir -p "$STORE" "$IDENTITY_DIR"; chmod 700 "$STORE" "$IDENTITY_DIR" 2>/dev/null
 
 [ "$OS" = "Darwin" ] && echo "NOTA: caminho macOS (Keychain) ainda nao validado em hardware Apple - confira o resultado" >&2
 
@@ -84,9 +134,14 @@ case "${1:-}" in
     [ -n "$a" ] || { echo "sem-ativa"; exit 0; }
     valid_file "$STORE/$a.json" || { echo "diverge:$a"; exit 0; }
     h1="$(live_read | hash_stdin)"; h2="$(hash_stdin < "$STORE/$a.json")"
-    if [ "$h1" = "NOHASH" ]; then echo "indeterminado:$a"
-    elif [ "$h1" = "$h2" ]; then echo "confere:$a"
-    else echo "diverge:$a"; fi
+    if [ "$h1" = "NOHASH" ]; then echo "indeterminado:$a"; exit 0; fi
+    if [ "$h1" != "$h2" ]; then echo "diverge:$a"; exit 0; fi
+    identity_matches "$a"; rc=$?
+    case $rc in
+      0) echo "confere:$a" ;;
+      1) echo "identidade-divergente:$a" ;;
+      *) echo "sem-identidade:$a" ;;
+    esac
     exit 0
     ;;
   --list)
@@ -109,6 +164,9 @@ case "${1:-}" in
       fi
       fail "credenciais ativas ausentes ou invalidas em $(live_where) - faca login primeiro"
     }
+    if ! save_identity "$(identity_path "$name")"; then
+      echo "AVISO: identidade nao extraida de $STATE - a troca vai levar so o token"
+    fi
     printf '%s' "$name" > "$MARKER"
     echo "conta '$name' salva e marcada como ativa"; exit 0
     ;;
@@ -125,14 +183,19 @@ a="$(active_name)"
 [ "$a" != "$name" ] || { echo "conta '$name' ja esta ativa"; exit 0; }
 
 if snapshot_live "$STORE/_backup-anterior.json"; then
-  [ -z "$a" ] || cp -f "$STORE/_backup-anterior.json" "$STORE/$a.json"
+  if [ -n "$a" ]; then
+    cp -f "$STORE/_backup-anterior.json" "$STORE/$a.json"
+    save_identity "$(identity_path "$a")" || true
+  fi
 elif [ -n "$a" ]; then
   fail "nao consegui ler as credenciais atuais de $(live_where) para salvar a conta '$a' - abortado para nao perder o token"
 fi
 
 live_write < "$target" || fail "falha ao gravar as credenciais em $(live_where)"
+id_result="$(apply_identity "$(identity_path "$name")")"
 printf '%s' "$name" > "$MARKER"
 
 echo "conta '$name' ativa"
+[ "$id_result" = "ok" ] || echo "AVISO: o token trocou mas a identidade NAO ($id_result) - o app vai exibir a conta antiga"
 [ -n "$a" ] || echo "AVISO: a conta anterior nao estava registrada; snapshot bruto em _backup-anterior.json"
 echo "reabra com: claude --continue"
