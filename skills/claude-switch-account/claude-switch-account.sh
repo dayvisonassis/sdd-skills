@@ -105,18 +105,25 @@ identity_matches() {
 
 other_session_count() {
   command -v pgrep >/dev/null 2>&1 || return 1
-  local mine pid found=0 n=0
-  mine=" "
-  pid=$$
+  local mine=" " pid=$$ host_parent="" nm pp n=0
   while [ -n "$pid" ] && [ "$pid" != "0" ] && [ "$pid" != "1" ]; do
     mine="$mine$pid "
+    nm="$(ps -o comm= -p "$pid" 2>/dev/null | tr -d ' ')"
+    case "$nm" in
+      claude|claude.exe)
+        [ -n "$host_parent" ] || host_parent="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+        ;;
+    esac
     pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
   done
-  for p in $(pgrep -x claude 2>/dev/null; pgrep -f 'claude-code' 2>/dev/null); do
+  for p in $( { pgrep -x claude 2>/dev/null; pgrep -f 'claude-code' 2>/dev/null; } | sort -u ); do
     case "$mine" in *" $p "*) continue ;; esac
-    n=$((n+1)); found=1
+    if [ -n "$host_parent" ]; then
+      pp="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
+      [ "$pp" = "$host_parent" ] && continue
+    fi
+    n=$((n+1))
   done
-  [ "$found" -eq 1 ] || n=0
   echo "$n"
 }
 
@@ -216,7 +223,15 @@ if real="$(identify_live)" && [ -n "$real" ]; then outgoing="$real"; fi
 stale_note=""
 
 current="${outgoing:-$a}"
-[ "$current" != "$name" ] || { echo "conta '$name' ja esta ativa"; exit 0; }
+if [ "$current" = "$name" ]; then
+  if [ "$a" != "$name" ]; then
+    printf '%s' "$name" > "$MARKER"
+    echo "conta '$name' ja esta ativa (marcador corrigido: dizia '$a')"
+  else
+    echo "conta '$name' ja esta ativa"
+  fi
+  exit 0
+fi
 
 if snapshot_live "$STORE/_backup-anterior.json"; then
   if [ -n "$outgoing" ]; then

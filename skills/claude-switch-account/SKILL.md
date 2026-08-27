@@ -52,8 +52,11 @@ Keychain on macOS.
    they are choosing (see the next section), and do not proceed on your own
    judgement. `indeterminado` is not a green light: say the check could not run.
 
-   N counts processes, not people. One editor window can account for more than
-   one, so treat it as "something else is running", never as an exact tally.
+   N counts processes, not people. Processes belonging to the caller's own host -
+   its ancestry, and the siblings that host spawned alongside it - are excluded,
+   because an editor window starts more than one and counting them would make the
+   warning fire on every single switch. Treat N as "something else is running",
+   never as an exact tally.
 
 3. **On `diverge:<name>`, ask - never guess.** Two different events produce it and
    they cannot be told apart without reading the token, which this skill does not do:
@@ -111,7 +114,10 @@ Two consequences follow:
 
 The same rule governs "this account is already active": that is answered from
 the identity too, since a stale marker would otherwise make the skill decline a
-switch that genuinely needs to happen.
+switch that genuinely needs to happen. When that path finds the marker naming
+the wrong account, it corrects the marker before returning - otherwise the
+record stays wrong for as long as the user keeps using the account they are
+already on, which is exactly when nobody would think to look.
 
 ## Another live session will undo the switch
 

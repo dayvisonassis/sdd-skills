@@ -110,7 +110,12 @@ function Get-OtherSessionCount {
             $p = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)" -ErrorAction SilentlyContinue
         }
         $all = @(Get-CimInstance Win32_Process -Filter "Name='claude.exe'" -ErrorAction Stop)
-        return @($all | Where-Object { $mine -notcontains $_.ProcessId }).Count
+        $hostProc = $all | Where-Object { $mine -contains $_.ProcessId } | Select-Object -First 1
+        $hostParent = if ($hostProc) { $hostProc.ParentProcessId } else { $null }
+        return @($all | Where-Object {
+            ($mine -notcontains $_.ProcessId) -and
+            ((-not $hostParent) -or ($_.ParentProcessId -ne $hostParent))
+        }).Count
     } catch {
         return -1
     }
@@ -182,7 +187,15 @@ $active = Get-ActiveName
 $outgoing = Get-LiveAccount
 $staleNote = ''
 $current = if ($outgoing) { $outgoing } else { $active }
-if ($current -eq $Account) { Write-Output "conta '$Account' ja esta ativa"; exit 0 }
+if ($current -eq $Account) {
+    if ($active -ne $Account) {
+        Set-Content -Path $Marker -Value $Account -NoNewline
+        Write-Output "conta '$Account' ja esta ativa (marcador corrigido: dizia '$active')"
+    } else {
+        Write-Output "conta '$Account' ja esta ativa"
+    }
+    exit 0
+}
 ''
 if (Test-CredFile $Cred) {
     Copy-Item $Cred (Join-Path $Store '_backup-anterior.json') -Force
