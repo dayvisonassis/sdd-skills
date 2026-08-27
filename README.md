@@ -27,6 +27,7 @@ sdd-skills/
 │   ├── playwright-cli/          # drive a real browser: smoke tests, visual checks, Playwright specs
 │   ├── coupling-map/            # which files to refactor first: blast radius x size, as a standalone HTML report
 │   ├── handoff-writer/          # compact a conversation into a handoff, asking where to save it
+│   ├── claude-switch-account/   # switch the active Claude account without the browser OAuth round-trip
 │   ├── unit-test-writer/            # PABX: Angular .spec.ts + Node apps/backend/__tests__/unit
 │   ├── unit-test-validator/         # PABX: audits the above
 │   ├── integration-test-writer/     # PABX: apps/backend/__tests__/integration (supertest + DB)
@@ -179,6 +180,14 @@ and ready-made recipes (greenfield, brownfield, batch).
 - **Reference docs** in `docs/` explain the rationale behind each piece — read them when you
   want the "why"; the guide is enough for day-to-day use. They stay in this repository and are
   **not** part of an installed skill: everything a skill needs to run lives in its own folder.
+- **`claude-switch-account` ships one script per platform** (PowerShell and POSIX shell) and
+  is the only skill here that touches credentials. It swaps saved copies of the credential
+  store so switching accounts skips the browser; it never reads or transmits a token. The
+  Linux path is verified on ext4, the Windows path on NTFS, and the **macOS Keychain path has
+  only ever run against a stubbed `security` command** - the first Mac user should confirm it
+  and drop the warning the skill prints. A wrong Keychain item name fails safe: it cannot
+  read, so it refuses to write.
+
 - **`coupling-map` ships executable code**, which no other skill here does — a Node script it
   copies into the target project, plus the tests that cover it. Run them from this repository's
   root, with the pattern **quoted** so Node expands it rather than the shell:
