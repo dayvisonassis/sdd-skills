@@ -207,6 +207,19 @@ second, independent Claude beside it. The user then has two sessions live on two
 different accounts, and the panel - which belongs to the extension - keeps
 showing the old one. Name the host before telling anyone what to restart.
 
+## Account names
+
+Any name works, spaces included, as long as it has no slash, no control
+character, and does not start with `_` - that prefix marks the store's own
+files, and an account using it would be invisible in every listing. Names are
+rejected up front rather than producing a store that half works.
+
+Whitespace inside a name is content, not padding. Only the ends are trimmed when
+the marker is read back, on both platforms: stripping all whitespace turns
+`Trabalho 2` into `Trabalho2`, the marker then matches nothing, and the account
+can never be shown as active nor reconciled - a break that is silent, permanent,
+and only on POSIX.
+
 ## Registering
 
 1. If an account is currently logged in and unsaved, save it first:
