@@ -89,6 +89,13 @@ apply_identity() {
   esac
 }
 
+identify_live() {
+  local py
+  py="$(py_exe)" || return 1
+  [ -f "$IDENTITY_PY" ] || return 1
+  "$py" "$IDENTITY_PY" whoami "$STATE" "$IDENTITY_DIR" 2>/dev/null
+}
+
 identity_matches() {
   local snap; snap="$(identity_path "$1")"
   [ -f "$snap" ] || return 2
@@ -153,6 +160,9 @@ case "${1:-}" in
     [ -n "$(saved_accounts)" ] || { echo "sem-cadastro"; exit 0; }
     a="$(active_name)"
     [ -n "$a" ] || { echo "sem-ativa"; exit 0; }
+    if real="$(identify_live)" && [ -n "$real" ] && [ "$real" != "$a" ]; then
+      echo "marcador-desatualizado:$real"; exit 0
+    fi
     valid_file "$STORE/$a.json" || { echo "diverge:$a"; exit 0; }
     h1="$(live_read | hash_stdin)"; h2="$(hash_stdin < "$STORE/$a.json")"
     if [ "$h1" = "NOHASH" ]; then echo "indeterminado:$a"; exit 0; fi
@@ -201,12 +211,20 @@ target="$STORE/$name.json"
 valid_file "$target" || fail "conta '$name' nao esta salva ou o arquivo esta invalido - use --list"
 
 a="$(active_name)"
-[ "$a" != "$name" ] || { echo "conta '$name' ja esta ativa"; exit 0; }
+outgoing=""
+if real="$(identify_live)" && [ -n "$real" ]; then outgoing="$real"; fi
+stale_note=""
+
+current="${outgoing:-$a}"
+[ "$current" != "$name" ] || { echo "conta '$name' ja esta ativa"; exit 0; }
 
 if snapshot_live "$STORE/_backup-anterior.json"; then
-  if [ -n "$a" ]; then
-    cp -f "$STORE/_backup-anterior.json" "$STORE/$a.json"
-    save_identity "$(identity_path "$a")" || true
+  if [ -n "$outgoing" ]; then
+    cp -f "$STORE/_backup-anterior.json" "$STORE/$outgoing.json"
+    save_identity "$(identity_path "$outgoing")" || true
+    [ "$outgoing" = "$a" ] || stale_note="stale"
+  else
+    stale_note="skip"
   fi
 elif [ -n "$a" ]; then
   fail "nao consegui ler as credenciais atuais de $(live_where) para salvar a conta '$a' - abortado para nao perder o token"
@@ -217,6 +235,11 @@ id_result="$(apply_identity "$(identity_path "$name")")"
 printf '%s' "$name" > "$MARKER"
 
 echo "conta '$name' ativa"
+if [ "$stale_note" = "skip" ]; then
+  echo "AVISO: nao identifiquei a conta que estava ativa - NAO regravei nenhum snapshot, para nao gravar por cima do errado"
+elif [ "$stale_note" = "stale" ]; then
+  echo "NOTA: a conta que saiu era '$outgoing' (o marcador dizia '$a') - salvei nela, nao no que o marcador dizia"
+fi
 [ "$id_result" = "ok" ] || echo "AVISO: o token trocou mas a identidade NAO ($id_result) - o app vai exibir a conta antiga"
 [ -n "$a" ] || echo "AVISO: a conta anterior nao estava registrada; snapshot bruto em _backup-anterior.json"
 echo "reabra com: claude --continue"

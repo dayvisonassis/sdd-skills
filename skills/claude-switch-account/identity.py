@@ -9,8 +9,8 @@ can parse the real file safely: ConvertFrom-Json builds a case-insensitive map
 and aborts on project keys that differ only in case, which real state files do
 contain.
 
-Exit codes: 0 ok / 1 differs (compare) / 2 state unreadable / 3 source invalid
-/ 4 write failed / 5 no identity present
+Exit codes: 0 ok / 1 differs or not identified / 2 state unreadable / 3 source
+invalid / 4 write failed / 5 no identity present
 """
 import json
 import os
@@ -92,6 +92,45 @@ def compare(state, snap):
     return 0
 
 
+def whoami(state, identities_dir):
+    """Name the account the live identity belongs to.
+
+    The marker file records the last account this tool activated, so it goes
+    stale the moment someone switches by any other means. The identity does
+    not: it survives token refresh and is written by whoever logged in. It is
+    therefore the only trustworthy answer to "which account is live".
+
+    Ambiguity is reported as failure, never as a guess: acting on the wrong
+    name here overwrites another account's snapshot.
+    """
+    try:
+        data = load(state)
+    except Exception:
+        return 2
+    try:
+        names = sorted(os.listdir(identities_dir))
+    except Exception:
+        return 1
+    matches = []
+    for fn in names:
+        if not fn.endswith(".json"):
+            continue
+        try:
+            ident = load(os.path.join(identities_dir, fn))
+        except Exception:
+            continue
+        same = all(
+            json.dumps(data.get(k), sort_keys=True) == json.dumps(ident.get(k), sort_keys=True)
+            for k in KEYS
+        )
+        if same:
+            matches.append(fn[:-5])
+    if len(matches) != 1:
+        return 1
+    sys.stdout.write(matches[0])
+    return 0
+
+
 def main(argv):
     if len(argv) < 2:
         return 2
@@ -102,6 +141,8 @@ def main(argv):
         return apply(argv[2], argv[3], argv[4])
     if cmd == "compare" and len(argv) == 4:
         return compare(argv[2], argv[3])
+    if cmd == "whoami" and len(argv) == 4:
+        return whoami(argv[2], argv[3])
     return 2
 
 

@@ -83,6 +83,14 @@ function Apply-Identity([string]$Src) {
     }
 }
 
+function Get-LiveAccount {
+    if (-not $PyExe) { return $null }
+    if (-not (Test-Path $IdentityPy)) { return $null }
+    $out = & $PyExe $IdentityPy whoami $State $IdentityDir 2>$null
+    if ($LASTEXITCODE -eq 0 -and $out) { return "$out".Trim() }
+    return $null
+}
+
 function Test-IdentityMatches([string]$Name) {
     $snap = Get-IdentityPath $Name
     if (-not (Test-Path $snap)) { return $null }
@@ -128,6 +136,8 @@ if ($Status) {
     if (@(Get-SavedAccounts).Count -eq 0) { Write-Output 'sem-cadastro'; exit 0 }
     $active = Get-ActiveName
     if (-not $active) { Write-Output 'sem-ativa'; exit 0 }
+    $real = Get-LiveAccount
+    if ($real -and $real -ne $active) { Write-Output "marcador-desatualizado:$real"; exit 0 }
     $snap = Join-Path $Store "$active.json"
     if (-not (Test-CredFile $snap)) { Write-Output "diverge:$active"; exit 0 }
     $h1 = (Get-FileHash -Path $Cred -Algorithm SHA256).Hash
@@ -169,13 +179,19 @@ $target = Join-Path $Store "$Account.json"
 if (-not (Test-CredFile $target)) { Fail "conta '$Account' nao esta salva ou o arquivo esta invalido - use -List" }
 
 $active = Get-ActiveName
-if ($active -eq $Account) { Write-Output "conta '$Account' ja esta ativa"; exit 0 }
-
+$outgoing = Get-LiveAccount
+$staleNote = ''
+$current = if ($outgoing) { $outgoing } else { $active }
+if ($current -eq $Account) { Write-Output "conta '$Account' ja esta ativa"; exit 0 }
+''
 if (Test-CredFile $Cred) {
     Copy-Item $Cred (Join-Path $Store '_backup-anterior.json') -Force
-    if ($active) {
-        Copy-Item $Cred (Join-Path $Store "$active.json") -Force
-        Save-Identity (Get-IdentityPath $active) | Out-Null
+    if ($outgoing) {
+        Copy-Item $Cred (Join-Path $Store "$outgoing.json") -Force
+        Save-Identity (Get-IdentityPath $outgoing) | Out-Null
+        if ($outgoing -ne $active) { $staleNote = 'stale' }
+    } else {
+        $staleNote = 'skip'
     }
 }
 
@@ -184,6 +200,11 @@ $idResult = Apply-Identity (Get-IdentityPath $Account)
 Set-Content -Path $Marker -Value $Account -NoNewline
 
 Write-Output "conta '$Account' ativa"
+if ($staleNote -eq 'skip') {
+    Write-Output 'AVISO: nao identifiquei a conta que estava ativa - NAO regravei nenhum snapshot, para nao gravar por cima do errado'
+} elseif ($staleNote -eq 'stale') {
+    Write-Output "NOTA: a conta que saiu era '$outgoing' (o marcador dizia '$active') - salvei nela, nao no que o marcador dizia"
+}
 if ($idResult -ne 'ok') {
     Write-Output "AVISO: o token trocou mas a identidade NAO ($idResult) - o app vai exibir a conta antiga"
 }
