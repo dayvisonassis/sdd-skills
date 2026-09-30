@@ -42,8 +42,14 @@ Check EVERY rule from `../integration-test-writer/references/pabx-rules.md`:
 - **Language & Naming** [CRITICAL] — English only; descriptive names; no double blank lines.
 - **Test Structure** [MAJOR] — AAA; independence; deterministic; `setupTestDatabase`/`cleanupTestDatabase`/`supertest`/`app` file pattern; no prod modification.
 - **Data Cleanup** [CRITICAL] — `try-finally` per data-creating test; `try-catch` inside `finally`; FK order (`audit_logs` → `users_permissions`/`user_permissions_group` → `group_permissions` → `permissions` → `users` → `dr_agent` → `dr_domain`); only test-created data; no data left behind; ≥2 cleanup levels.
-- **Execution Setup** [MAJOR] — `setupTestDatabase()` in `beforeAll` (destructure `token`); `cleanupTestDatabase()` in `afterAll`; correct imports.
+- **Execution Setup** [MAJOR] — E1–E3 of `pabx-rules.md`: `setupTestDatabase()` in `beforeAll` and the token from `generateToken`; `cleanupTestDatabase()` in `afterAll`; correct imports.
 - **Coverage** [MAJOR] — CRUD, auth/authorization, validation errors, not-found, edge cases, security (SQLi/XSS), checklist alignment.
+- **Query growth** [CRITICAL] — "Query growth" in `pabx-rules.md`, by its rule ids. Cite the id of each violated Q rule instead of paraphrasing it. Check:
+  - each endpoint in the section's scope has exactly one recorded outcome in the checklist;
+  - every `not measurable` or `pre-existing N+1` outcome holds against the code, and no other reason is used;
+  - every growth test meets every Q rule.
+
+  **Check only what the dispatch targets.** In a suite written or expanded from a checklist, that means the checklist's endpoints. When confirming a correction, it means only the tests the writer wrote or changed. A growth test missing for an endpoint outside that target is not a violation: legacy suites have none.
 - **Forbidden Practices** [CRITICAL] — no prod modification; no external data scripts; no pre-existing-data removal; no afterEach-only cleanup for created data; no Portuguese.
 - **API Behavior** [MINOR] — status assertions; response-body assertions; correct HTTP methods; `Authorization` header on authenticated requests.
 

@@ -40,7 +40,9 @@ real test database (full request→response lifecycle: middleware, controller, m
 
 **Correction mode (evaluator, `kind:test`):** an `evaluation_report` is provided. Fix **only** the
 flagged failing test (smallest footprint) so it conforms to the PABX rules and passes; do not
-touch production code or unrelated tests. Return control to the evaluator.
+touch production code or unrelated tests. When the report names a **missing query-growth test**
+(an endpoint, no failing test), write that one test, or record the outcome that applies, in the
+checklist; touch nothing else. Return control to the evaluator.
 
 ---
 
@@ -51,7 +53,7 @@ touch production code or unrelated tests. Return control to the evaluator.
 2. Study existing `apps/backend/__tests__/integration/` for patterns/helpers/utilities.
 3. Read the target controller/model/route fully; map code paths.
 4. Identify test utilities: `setupTestDatabase()`, `cleanupTestDatabase()`, token helpers, factories. Consult DB schema (MCP MySQL) for FK constraints if needed.
-5. Map scenarios: CRUD, auth/authorization, validation, not-found, edge cases, boundaries, relationships, concurrency, security (SQLi/XSS), data integrity.
+5. Map scenarios: CRUD, auth/authorization, validation, not-found, edge cases, boundaries, relationships, concurrency, security (SQLi/XSS), data integrity, and **query growth** (N+1): one recorded outcome per endpoint in its scope (`references/pabx-rules.md`, "Query growth — Scope and outcomes").
 
 ### Phase 2 — Checklist Creation
 Create a `.test.md` checklist (name, objective, input, expected status + response). Cover the
