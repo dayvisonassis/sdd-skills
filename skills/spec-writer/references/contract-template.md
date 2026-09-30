@@ -24,6 +24,7 @@ actual commands from the project (`package.json` scripts, Makefile, etc.). See
 - [ ] <gate-id: build> — e.g. project build
 - [ ] <gate-id: tests> — e.g. unit/integration test command
 - [ ] <gate-id: arch> — e.g. dependency-cruiser / custom architecture check (when present)
+- [ ] <gate-id: e2e> — e.g. browser end-to-end suite against the running app (when present)
 
 > Each gate has a stable `id` (referenced by the evaluation-report `failures[].ref`).
 
@@ -49,3 +50,15 @@ Each acceptance is an observable signal with verifiable evidence (not a vague de
 - [ ] `<crit-id>` — <observable criterion, e.g. login in top navigation>
 
 > Each criterion has a stable `id` (referenced by the evaluation-report `failures[].ref`).
+
+## Test-suite hint
+
+Which suite covers each surface. **Required for every UI surface when the project has an e2e
+suite**; optional otherwise. One UI behavior lands in exactly one row.
+
+| Surface / behavior | Suite |
+|---|---|
+| `<API-01>` | <unit \| integration \| monorepo> |
+| `<UI-01>` — <user flow: action → observable result> | e2e |
+| `<UI-01>` — <rendered measurement: contrast, height, density> | <visual gate id> |
+| `<UI-01>` — <unreachable by automation: telephony, hardware, second tenant> | runtime-only |

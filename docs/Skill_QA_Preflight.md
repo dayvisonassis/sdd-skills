@@ -132,7 +132,7 @@ A `qa-preflight` produz um relatório no **mesmo schema** que o `evaluator` já 
 (`evaluation-report.json`) e despacha:
 
 - **`fix-runner`** → `kind: gate`, `observable-criterion`, `qa-finding`
-- **test-writer da vez** (`unit`/`integration`/`monorepo`) → `kind: test`
+- **test-writer da vez** (`unit`/`integration`/`monorepo`/`e2e`) → `kind: test`
 
 ### Duas emendas necessárias nas skills existentes
 
@@ -197,6 +197,11 @@ visual, ou a regra nova de gate, ou o teste que faltava.
 **A skill escreve a asserção dentro da suíte visual apenas quando o gate visual já estiver
 ligado.** Com o gate desligado, ela entrega a asserção pronta no relatório e para por aí —
 escrever numa suíte não provada é empilhar dívida sobre dívida.
+
+**A guarda de um fluxo não é dela.** Quando o achado é um fluxo (o usuário age e algo deveria
+acontecer), a guarda vai para a **`e2e-test-writer`** (`kind: test`, `testSuite: e2e`), desde
+que o projeto tenha a suíte e2e. A exceção que sobra para a própria skill é só a asserção de
+**valor computado** da suíte visual, que nenhuma test-writer cobre.
 
 ---
 

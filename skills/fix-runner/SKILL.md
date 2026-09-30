@@ -61,6 +61,7 @@ If no error report can be found, abort: "fix-runner requires an evaluation-repor
 
 - Run **specifically** the gate/test that failed (from the report's `ref`/`location`), not the whole suite — a cheap smoke check to avoid returning an obviously broken fix.
 - If it still fails, adjust **within the same error's scope** and re-run. Do not expand scope to unrelated problems.
+- **Browser gates (e2e or visual) run against the dev server, not the files on disk.** Before re-running one, confirm in the dev server's log that the rebuild after your edit finished successfully — a failed build keeps serving the previous bundle with HTTP 200. A `429` or every case on the sign-in screen is the auth rate limit, not your fix: stop re-running and return "correction applied (local revalidation skipped: environment — <which>)". Every run spends logins.
 - This local check does NOT replace the evaluator — the evaluator re-confirms against the whole contract afterward.
 
 ### Step 5: Commit

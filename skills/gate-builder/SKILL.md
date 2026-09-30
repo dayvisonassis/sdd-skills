@@ -66,6 +66,18 @@ From `Como_criar_gates.md`, choose the gates the project needs, mapped to the de
 | `deadcode` | Hygiene | knip (or equivalent) | Deep test gaps / unused code |
 | `design-system` | UI conformance | stylelint (CSS) + custom template lint rules (HTML/JSX) + filename checks | a **design-system doc** of the project (see below) + the **dominant UI patterns** in the code |
 | `visual-contract` | Rendered values | a browser runner (Playwright/equivalent) asserting **computed** values | defects that static rules structurally cannot see (see below) |
+| `e2e` | User flows | a browser runner driving real flows through the UI and API of the running app | the project's UI runtime surfaces + the test infrastructure (see below) |
+
+**What a test gate builds — and what it never does.** For `tests` and `e2e`, this skill builds
+the **runner and the harness**: config, scripts, the orchestrator entry, and in greenfield the
+runner's installation. It writes **no feature tests and no test rules**. Where tests live,
+their patterns, their data policy and which accounts they use are architecture decisions of the
+team; they are codified in the project's test-writer references, and those skills are
+dispatched per feature by `implement-feature` and `evaluator` through `contract.md` — never by
+this skill. In greenfield with no decided test strategy, record in `GATES.md` that it is
+undecided (test patterns, data policy, which accounts feature tests use) instead of inventing
+one. The harness still needs a directory and an account for its seed: pick them, and mark both
+**provisional** in `GATES.md` for the team to confirm.
 
 **The `visual-contract` gate — why a static rule is not enough.** A linter reads one file; it cannot see a colour composed over a translucent parent, a transform, or a value a global `!important` overrode. Component tests usually run in a DOM emulator (jsdom and friends) with **no layout at all** — no real `getBoundingClientRect`, no resolved `transform`, no global cascade — so a suite can be entirely green while a label sits on top of the text it labels. Real cases this catches, all of which survived a green run: a status badge at 2.19:1 contrast in one theme only; a floating label overlapping the typed value; that same label at 12px next to siblings rendering at 9px; overlay `select` options at the framework default because the panel lives outside the component's style encapsulation; and one user action firing two identical requests.
 
@@ -76,6 +88,16 @@ Mind the two properties that make it different from every other gate, and design
 - **It runs headless.** That is correct for a gate and is not the same thing as the headed run a human follows during a smoke test — say so wherever both are mentioned, or someone will watch an empty screen waiting for a window that never opens.
 
 Do not enable it in the default gate list until it has been **proven green once**. An unproven browser gate turns every run red for harness reasons (login walls, CAPTCHA, timing) rather than code reasons, which is worse than not having it.
+
+**The `e2e` gate — the harness is the gate's, the tests are not.** Where `visual-contract` reads rendered values, `e2e` drives a user flow and asserts what observably follows (a search narrows, a submit is refused, a record appears). It shares the two properties above — it needs the app running, and it runs headless — and adds three of its own:
+
+- **Separate from `visual-contract`.** Its own runner config and test directory. A browser runner collects every test under its configured directory, so a shared config makes each gate silently run the other's suite.
+- **Sessions are bootstrapped once and reused — across runs, not only within one.** Authenticate in the runner's global setup, store the session, and let every test reuse it; on the next run, reuse the stored session while it is still valid instead of logging in again, and share the visual gate's stored sessions when both exist. Auth endpoints are usually rate-limited, and every caller of this gate (the implementer, the evaluator, the correctors) runs it repeatedly — a harness that logs in per run spends the budget in a few evaluations, and one that logs in per test fails its second run on the sign-in screen, which reads as product defects. Never forge a session or bypass an anti-bot check; use only the application's documented non-production anti-bot setting (not to be confused with the gate's own skip flag above), and name it in `GATES.md`. One runner project per session (e.g. admin and agent), so the folder a test lives in decides its session.
+- **A seed test proves the harness, not the product.** An `e2e` gate with zero tests passes having verified nothing. Build one seed test **per session** that lands on the app — authenticated, when the app has authentication — it is infrastructure, like the deliberate violation of Step 7 — and prove the gate fail→pass by breaking a seed's expectation. Feature tests come later, from the project's e2e test-writer.
+
+Scope it like `visual-contract` but wider: a flow crosses the stack, so it runs when UI **or** API sources change, or the suite itself; no-op otherwise. Like `visual-contract`, keep it out of the default gate list until it has been **proven green once** — and record in `GATES.md` when it was, because the SDD skills treat the project as having an e2e suite only once `GATES.md` lists an e2e gate proven green.
+
+Tests create and remove their own data through the product, often as a different session from the one the flow runs in (an agent flow whose cleanup needs an administrator). Give them a sanctioned way to do it: **one API fixture per session** — a request context on the backend base URL (often a different origin from the UI) carrying that session's token — and put every session's account in **one tenant**, since deletes are usually tenant-scoped; the seed of one session can assert it. Document in `GATES.md` the fixtures, the API base URL, where to read the dev server's last build, and that the suite writes through the product into whatever database the app uses — the test-writer's data policy is what keeps that database clean, the gate cannot.
 
 Tailor `arch` to the **anti-patterns and rules surfaced in the reports**: e.g. forbid `domain → infrastructure` imports (circular deps in Deep §9), restrict `process.env` to a single `env` module (Deep §2.5 scattered config), forbid `try-catch` in handlers, flag God objects. Only include gates that make sense for the stack — do not invent a `build` gate for a pure library with no build, etc.
 
@@ -158,7 +180,7 @@ For each selected gate, in `runGate` order:
 
 ### Step 6: Build the Orchestrator (`runGate`)
 
-- Create a single entry point (`scripts/runGate.mjs` or the stack's idiom) that runs the gates **in order, cheapest first** (`typecheck → lint → build → arch → tests → deadcode`), **stops at the first failure**, and exits non-zero on any failure.
+- Create a single entry point (`scripts/runGate.mjs` or the stack's idiom) that runs the gates **in order, cheapest first** (`typecheck → lint → build → arch → tests → deadcode`, then the gates that need the running app, `visual-contract → e2e`), **stops at the first failure**, and exits non-zero on any failure.
 - Add a top-level `gate` script that invokes it. The orchestrator is what local dev, CI, and the SDD agents (`implement-feature`, `evaluator`) will call.
 
 **Registry shape (reconcile with the actual code).** The Phase-1 plan describes each gate conceptually as `id + command + scope + description`, but the emitted orchestrator registers gates as a concrete array of objects with exactly three fields: `{ id, label, run }`, where `run: () => boolean` (true = pass) wraps the command **and** the scoping inside a closure (there is no separate `command`/`scope` field). Changed-files scoping is computed once (git diff vs the base ref) and applied inside each `run` via a shared helper (e.g. `lintGate`/`stylesGate` that filters the changed set to the app + extensions and no-ops to `true` when empty). To add a gate: push one `{ id, label, run }` object into the array (in cheap→expensive order), add a matching `gate:<id>` script, and document it in `GATES.md`. Note the runner does **not** read `contract.md` — the SDD agents do, invoking `npm run gate:<id>` per the ids a feature declares.
@@ -175,7 +197,7 @@ For each selected gate, in `runGate` order:
 - Write `GATES.md`: the gate list with `id`s, the command for each, the `runGate` order, and the brownfield baseline note (if any). This is the human- and agent-readable contract of what gates exist — `spec-writer` reads the same tooling when it declares gates in `contract.md`.
 
 - `GATES.md` MUST also carry a **"What these gates do NOT check"** section. Gates are deterministic commands; a green run is routinely mistaken for "verified", and the gaps are invisible precisely because nothing reports them. This section is the only tracked place where those obligations live — skill folders like `.claude/skills/` are usually gitignored (see the shared-source warning in Phase 1) and an assistant's local memory does not reach the team at all. State at minimum:
-  - **Interactive behaviour.** No gate drives a filter, a select, a toggle or pagination. A listing screen whose gates are green may still ship a filter that is wired to nothing. Whoever validates must exercise **each control individually**, and **an empty result never validates a filter** — filtering by a value that matches nothing returns zero rows whether the filter works or is ignored, so it must be exercised with a value present in the data.
+  - **Interactive behaviour** — *unless the project has the `e2e` gate, and then only on the flows it covers*. Without it, no gate drives a filter, a select, a toggle or pagination. A listing screen whose gates are green may still ship a filter that is wired to nothing. Whoever validates must exercise **each control individually**, and **an empty result never validates a filter** — filtering by a value that matches nothing returns zero rows whether the filter works or is ignored, so it must be exercised with a value present in the data. Where `e2e` exists, list here the screens and controls it does **not** drive yet.
   - **Measured visual conformance** — *unless the project has the `visual-contract` gate*. Colour, contrast, spacing and density rules that the linters express as advisories, or cannot express at all, are only proven by reading computed values in a browser, never by the presence of a class; a global `!important` can silently defeat a component rule, so the documented value and the rendered value may differ. Where `visual-contract` exists, list here only what it does **not** yet assert — and keep that list honest as the suite grows, or this section quietly becomes fiction in the opposite direction.
   - **Anything a rule marks as a warning rather than an error.** Name them, because "the gate passed" hides them. Flag the trap explicitly: silencing an advisory by swapping a value (e.g. a colour for a token) can regress the very property the advisory was pointing at, so any such swap must be re-measured.
   - **Whatever the stack's gates provably cannot reach** (real credentials, external services, telephony/hardware, cross-browser).
@@ -213,6 +235,7 @@ Next: spec-writer will declare these gate ids in each feature's contract.md
 - Build a single `runGate` orchestrator (cheap→expensive, stop at first failure, non-zero exit).
 - Verify each gate actually runs before claiming success; record the brownfield baseline.
 - Only write gate configs/scripts/docs — never modify application/business code.
+- For `tests`/`e2e`, build the runner and harness (and the `e2e` seed test) but never feature tests or test rules.
 
 **Never:**
 - Modify application/business code to make a gate pass (that's feature work / fix-runner).
@@ -240,6 +263,8 @@ Next: spec-writer will declare these gate ids in each feature's contract.md
 **Dev dependencies cannot be installed in this environment:** declare them in the manifest, wire the scripts, and mark each affected gate "needs install" in the verification report instead of falsely reporting it passing.
 
 **Pure library (no build/runtime surface):** include `typecheck`, `lint`, `tests`, `arch`, `deadcode`; omit `build` if there is genuinely nothing to build. Do not fabricate runtime gates.
+
+**User asks the gate-builder to also write tests (or test conventions):** decline that part. Build the runner, the harness and the seed; point to the project's test-writers for tests — or, when none covers this stack, say so: `implement-feature` then writes them itself — and record undecided test conventions in `GATES.md` for the team.
 
 **User override "lint only" / excludes a gate:** build only the requested gates; the `runGate` order adapts. Note the omitted gates so they can be added later.
 

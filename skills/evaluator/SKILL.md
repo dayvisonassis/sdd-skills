@@ -46,7 +46,7 @@ If the feature has no `contract.md`, abort: "No contract.md for F<ID> — genera
 
 ### Step 2: Load Context
 
-- Read `contract.md`: Environment Contract, Quality Gates (with `id`s), Coverage Manifest, Surfaces & Behaviors, Observable Criteria (with `id`s).
+- Read `contract.md`: Environment Contract, Quality Gates (with `id`s), Coverage Manifest, Surfaces & Behaviors, Observable Criteria (with `id`s), Test-suite hint.
 - Read `progress.json`: this feature's `state`, `attempt`, and `config.maxFixAttempts` (N).
 - The contract is the **single source of acceptance criteria**. Do NOT invent criteria outside it.
 
@@ -63,12 +63,18 @@ If the feature has no `contract.md`, abort: "No contract.md for F<ID> — genera
   - The failure is a **code failure** (`kind: gate` or `observable-criterion`) when production code is wrong — a type error, lint/build/arch violation, or a missing observable behavior.
   - The failure is a **test failure** (`kind: test`) when the test itself is broken/non-conforming — e.g. the `tests` gate fails and the cause is the test file (missing/incorrect mock, wrong pattern, a test that no longer matches correct behavior), not the production code. For a `kind: test` failure, fill the routing fields (`testSuite`, `testFile`, `targetFile`) per `references/evaluation-report-schema.md`.
   - When ambiguous (a failing test that might reflect a real code bug), prefer `kind: gate`/`observable-criterion` and let `fix-runner` handle the code; only route to a test-writer when the test is clearly the thing that is wrong.
+  - **A browser-gate failure (e2e or visual) has a third possible cause — the environment — and it is checked first.** A `429`, every case failing on the sign-in screen, the app not answering, or a dev server serving a stale bundle (its last build failed — read the dev server's log) is **PENDING (environment)**: neither `kind: test` nor `kind: gate`, no corrector is dispatched, and the evaluation stops as in Step 3. Only after the environment is ruled out classify the failure as test or code. For `kind: test` in an e2e file, also fill `targetSurface`.
+  - **A product failure caught by an e2e test** is `kind: observable-criterion` with the criterion id as `ref` when the failing test carries a criterion tag, and `kind: gate` with the e2e gate id otherwise.
+  - **A failing `tests/visual/` assertion that is itself wrong** (e.g. it measures mid-animation) belongs to no test-writer: record it as PENDING for a human, never as `kind: test` and never to `fix-runner` (see the schema).
 - (If `gates only` override is set, skip Step 5 and go to Step 6 with just gate results.)
 
 ### Step 5: Validate Surfaces & Observable Criteria
 
 - For each surface in the Coverage Manifest, start from its declared initial state and exercise the concrete behaviors (e.g. navigate the route via Playwright CLI, capturing screenshots).
+- **Exercising a write flow obeys the e2e data rules** of the project's writer (for PABX, D1–D6 of `../e2e-test-writer/references/pabx-rules.md`): act on records you create and remove afterwards, never on pre-existing data — the dev database is shared. With the e2e harness in place, reach its API fixtures through a harness run (`--debug=cli` on a seed, then `attach`); without it, create through the UI or the API with your own session and remove through the product's delete route, checking each status. When nothing you can use removes what the flow creates, observe the flow up to the submit and record the rest as PENDING for a human.
 - For each Observable Criterion, collect verifiable evidence (e.g. CTA present, login in top nav, redirect behavior, visual identity). A criterion with no observable evidence is a failure (`kind: observable-criterion`, `ref: <crit-id>`).
+- **When the project has an e2e suite (`GATES.md` lists an e2e gate proven green)**, the e2e tests tagged with a criterion's id are part of its evidence. Get them from **one run per feature**, not one per criterion — every run costs the harness its logins against the auth rate limit. Reuse the e2e gate's result from Step 4 when it ran the feature's tests and its output can be mapped by tag; otherwise run once with the e2e config from `GATES.md` and `--grep "@<feature-id>(?![\w-])" --reporter=json`, and map the results by tag. Criterion ids repeat across features and `@F08` is a prefix of `@F08-v2`, so always pair the **anchored** feature tag with the criterion. The tests complement the screenshots, never replace the observation.
+- **Missing e2e coverage is a failure — per row, not per surface.** Every row the contract's `Test-suite hint` maps to `e2e` must appear in the writer's coverage table (`docs/<feature-id>-<kebab>/e2e-test.md`) with test titles that exist, carry the feature and surface tags and are **not** marked `unproven`, or with a `not e2e-testable` reason **from the writer's closed list** — telephony/hardware, a second tenant, an external credential, shared configuration the flow would have to create or change, or no removal path. An accepted reason makes that row yours to check by hand, like a `runtime-only` row, and it goes in Findings (the contract expected automation). "No removal path — harness lacks `<fixture>`" is an environment gap: PENDING, naming the fixture. A row the writer marks `out of e2e scope — <suite>` (a computed value, say) is a mistake of the contract's mapping: record it as PENDING for a human, with the suite it belongs to — never route it back to the writer. A row marked `unproven`, with neither, or with any other reason → `kind: test`, `testSuite: e2e`, `ref` = the e2e gate id, `targetSurface` = its surface, the behavior in `message`, no `testFile` — routed to `e2e-test-writer`, which runs in guard mode. **Only when the project is the PABX monorepo** (the `apps/frontend` + `apps/backend` layout the test-writers cover); elsewhere record it as PENDING for a human — no e2e writer exists for that stack, and routing it would only burn attempts.
 - Map every PRD-derived acceptance back to a contract criterion/gate (the contract already did this traceability; honor it).
 
 ### Step 6: Decide State
@@ -95,6 +101,7 @@ List exactly which gates/criteria failed.
   4. When the dispatched correction returns:
      - Correction applied → **increment `attempt`** in `progress.json`, then **re-evaluate**: go back to Step 3.
      - "not resolved — <reason>" → still increment `attempt`; if `attempt >= N` set `ABORTED`, else re-evaluate. Do not loop without incrementing.
+     - The two `e2e-test-writer` signals of Step 8 are the exceptions, handled there: no correction was applied, so they do not increment by themselves (a guard the writer adds is judged by its validator, as a new test).
 
 The evaluator **owns** the counter, the limit N, and the ABORTED decision. Correction skills are stateless and never decide when to stop.
 
@@ -102,18 +109,46 @@ The evaluator **owns** the counter, the limit N, and the ABORTED decision. Corre
 
 For a test failure, correcting the code is the wrong move — fix the test, then re-confirm it
 conforms. Select the suite from `testSuite`/`testFile` (deterministic rule in the schema):
-`unit` → `unit-test-*`, `integration` → `integration-test-*`, `monorepo` → `monorepo-unit-test-*`.
+`unit` → `unit-test-*`, `integration` → `integration-test-*`, `monorepo` → `monorepo-unit-test-*`,
+`e2e` → `e2e-test-*`.
 
 1. **Fix the test** — dispatch the matching **test-writer** in **correction mode** (autonomous),
-   passing the feature ID, the `evaluation-report.json` path, `testFile`, and `targetFile`. It
-   fixes only the flagged test (smallest footprint), never production code.
-2. **Confirm conformance** — dispatch the matching **test-validator** on the corrected `testFile`.
+   passing the feature ID, the `evaluation-report.json` path, `testFile`, and `targetFile`
+   (for `e2e`, `targetSurface` instead; with no `testFile`, `e2e-test-writer` runs in guard mode
+   and writes the missing test). It fixes only the flagged test (smallest footprint), never
+   production code. `e2e-test-writer` may instead return one of two signals:
+   - **"not resolved — product diverges from `<ref>`"** → do not take the writer's word for it.
+     If it came with a **new** test (guard mode), first run the validator on that file (step 2);
+     a guard that does not conform is a spent attempt like any other. Then re-observe the
+     criterion yourself (Step 5) and compare with the contract line it quotes.
+     - The product diverges → reclassify the failure as code with the same rule as Step 4
+       (`kind: observable-criterion` with the criterion id as `ref` when the test carries a
+       criterion tag, `kind: gate` with the e2e gate id otherwise), refresh the report, and dispatch `fix-runner` **in the same round** — the
+       misrouting was yours, so it costs no attempt; the `fix-runner` round increments as in
+       Step 7.4. A failure reclassified this way is never sent back to a test-writer in this
+       evaluation, and a guard the writer kept red turns green when the fix lands.
+     - The product does not diverge → you and the writer disagree — about what the contract
+       means, or because the test itself is wrong in a way no static check sees. Record
+       **PENDING** for a human with both observations and the contract line; do not re-dispatch
+       the writer. A guard it kept red stays uncommitted in the working tree, named first in the
+       PENDING note; until a human settles it, a failure of that test is reported as PENDING
+       (disputed), never routed.
+   - **"not resolved — environment: <which>"** (environment red, harness missing, or a stack the
+     writer does not cover) → PENDING (environment), as in Step 3. No increment.
+2. **Confirm conformance** — when the writer returned a corrected or new test, dispatch the
+   matching **test-validator** on that `testFile` (for `e2e`, also pass the `contract.md` and the
+   writer's checklist, so the tags are checked against real ids). An environment signal skips
+   this step: whatever tests it names are unproven — they stay marked `unproven` in the coverage
+   table and count as missing coverage on the next evaluation (Step 5), where the writer proves
+   them before anything relies on them.
    - Verdict **PASS** (or PASS WITH WARNINGS) → the test now conforms; **resume the evaluation
      where it left off** (re-run Step 3+ / the failing gate) and continue.
    - Verdict **FAIL** → the correction did not conform. Treat this round as a spent attempt:
      increment `attempt`; if `attempt >= N` → `ABORTED`; else loop (dispatch the test-writer again
-     with the validator's findings, then re-validate).
-3. Only after the test-validator returns PASS does the evaluator continue its own evaluation.
+     with the validator's findings, then re-validate). For a new e2e test, first set its path as
+     `testFile` in the report, so the writer corrects that file instead of writing another.
+3. When a test was corrected or written, only after the test-validator returns PASS does the
+   evaluator continue its own evaluation.
 
 > The test-writer/validator pair is a **sub-loop inside** the evaluator's main loop. It still
 > consumes the single `attempt`/N budget — never iterate the sub-loop without incrementing.
@@ -164,6 +199,8 @@ Next:
 - Derive the state from contract adherence, with evidence per criterion.
 - Own the loop: keep `attempt`/`maxFixAttempts` in `progress.json` and decide CLEAN/FAIL/PENDING/ABORTED.
 - Classify each failure by kind and route it: `gate`/`observable-criterion` → `fix-runner`; `test` → the matching test-writer (then confirmed by the matching test-validator).
+- Rule out the environment before classifying a browser-gate failure as test or code.
+- Get e2e evidence from one run per feature, never one per criterion.
 - After a `kind: test` correction, require the **test-validator PASS** before resuming the evaluation.
 - Re-evaluate after each correction until CLEAN, PENDING, or ABORTED.
 - Increment `attempt` once per correction round (code or test); never loop without incrementing.
@@ -189,6 +226,8 @@ Next:
 **Environment Contract not met**: state = PENDING, clearly labeled as environment, no fix-runner dispatch.
 
 **Gate command not runnable in this environment** (e.g. missing toolchain): treat as PENDING for that gate (needs environment), not FAIL — do not send the fix-runner after an environment gap. Note it in the report.
+
+**Browser-gate run (e2e or visual) red for a harness reason** (login rate limit `429`, sign-in screen on every case, stale bundle, app down): PENDING (environment). Do not re-run it in a loop to "see if it passes" — each run spends logins against the same limit that caused the failure.
 
 **maxFixAttempts reached**: state = ABORTED; keep the last `evaluation-report.json` for inspection.
 

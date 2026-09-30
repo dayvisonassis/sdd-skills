@@ -17,7 +17,7 @@ sdd-skills/
 ├── skills/
 │   ├── architecture-analyzer/   # map an existing codebase (surface area)
 │   ├── deep-analyzer/           # exhaustive per-unit analysis (needs the arch report)
-│   ├── gate-builder/            # build the quality gates (typecheck/lint/build/tests/arch/deadcode)
+│   ├── gate-builder/            # build the quality gates (typecheck/lint/build/tests/arch/deadcode/visual/e2e)
 │   ├── prd-writer/              # generate the product PRD
 │   ├── spec-writer/             # per feature: spec.md + plan.md + contract.md
 │   ├── implement-feature/       # implement, test, satisfy the contract gates, write progress.json
@@ -34,6 +34,8 @@ sdd-skills/
 │   ├── integration-test-validator/  # PABX: audits the above
 │   ├── monorepo-unit-test-writer/   # PABX: other apps/ (node-express/worker, python-fastapi)
 │   ├── monorepo-unit-test-validator/# PABX: audits the above
+│   ├── e2e-test-writer/             # PABX: tests/e2e (Playwright flows against the running app)
+│   ├── e2e-test-validator/          # PABX: audits the above
 │   └── pabx-design-system/          # PABX: pointer to the design-system doc (feeds the styles gate + visual check)
 └── docs/                        # base/reference docs + the workflow guide
 ```
@@ -146,13 +148,14 @@ PER FEATURE (repeat):
                               test-writer             └─ test  → test-writer → test-validator
 ```
 
-> **Test skills are PABX-specific.** The 6 `*-test-writer`/`*-test-validator` skills assume the
-> PABX monorepo layout (`apps/frontend`, `apps/backend`, `apps/*`). On a non-PABX project,
-> `implement-feature` falls back to writing tests itself. See the guide for details.
+> **Test skills are PABX-specific.** The 8 `*-test-writer`/`*-test-validator` skills assume the
+> PABX monorepo layout (`apps/frontend`, `apps/backend`, `apps/*`, `tests/e2e`). On a non-PABX
+> project, `implement-feature` falls back to writing tests itself. See the guide for details.
 
-> **`playwright-cli` serves the two steps that need a real browser:** `implement-feature`'s
-> environment smoke check (step 6.4 — drive every control, not just load the page) and the
-> `evaluator`'s screenshots for observable UI criteria. It is stack-agnostic and you can also
+> **`playwright-cli` serves the steps that need a real browser:** `implement-feature`'s
+> environment smoke check (step 6.4 — drive every control, not just load the page), the
+> `evaluator`'s screenshots for observable UI criteria, and `e2e-test-writer`'s exploration of a
+> live flow before it writes the test. It is stack-agnostic and you can also
 > invoke it on its own. Note that the Playwright **MCP tools** may already be available to the
 > agent independently; this skill is the usage guide on top of them — session handling, request
 > mocking, storage state, spec-driven testing — not the driver itself.

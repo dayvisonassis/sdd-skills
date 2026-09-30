@@ -246,6 +246,7 @@ CREATE INDEX ix_table_field ON table_name(field);
 |-----------|-----------|--------|---------------|
 | `tests/unit/test_service.py` | Unit | `service` | 90% |
 | `tests/integration/test_api.py` | Integration | API endpoints | 80% |
+| `tests/e2e/<profile>/f03-ui-01-checkout.spec.js` | E2E | UI surface `UI-01` | every user flow of the surface |
 
 **For each test file, list functions:**
 
