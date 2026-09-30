@@ -274,21 +274,23 @@ contract line does not support. Its lifecycle is the same wherever it starts:
    is committed or left as it is — the entry, not the commit state, is what stops it being routed.
 2. **Counted** as a row outcome: a row whose only content is `disputed` entries awaits
    arbitration and is **not** missing coverage — never dispatched to guard mode.
-3. **Arbitrated by the `evaluator` on every evaluation**, in Step 4, against the contract's
-   **current** line. It needs a run that included the feature's tests: when the e2e gate's run did
-   not (a changed-files no-op, a skip flag), the evaluator makes the single feature run
-   (`--grep "@<feature-id>(?![\w-])"`) there, and Step 5 reuses it.
+3. **Arbitrated by the `evaluator` on every evaluation**, in Step 4. It needs a run that included
+   that test: when the e2e gate's run did not (a changed-files no-op, a skip flag), the evaluator
+   makes the single feature run (`--grep "@<feature-id>(?![\w-])"`) there, and Step 5 reuses it.
+   It compares against the contract's **current** line:
+   - the current line differs from the one the entry recorded → the contract was changed to
+     settle it: close the entry (4) and classify the test like any other e2e test;
    - red, and the product diverges from the line → the test was right: code failure → `fix-runner`;
    - red, and the product matches the line → PENDING for a human with both readings, never routed
      (under `gates only`, which forbids re-observing, a red disputed test is simply PENDING);
    - green → the product and the test agree now: the dispute is moot;
-   - the test exists but did not run (skipped) → the entry stays open;
+   - the test exists but did not run (skipped) → PENDING for a human: a skip breaks V4, and
+     nothing proves the row;
    - absent — no test with that title at that path (`npx playwright test --config <e2e config>
      --list`) → the entry is stale.
-4. **Closed only by the `evaluator`**: a moot entry goes back to the plain test title — or to the
-   title marked `unproven` when the test's file changed since the dispute opened (`git log` on
-   it), so the writer proves it and the validator audits it before it counts again; a stale entry
-   is removed, and the row is judged on what remains — a row left empty is missing coverage. A
+4. **Closed only by the `evaluator`**: a closed entry — moot, or settled by a contract change —
+   goes back to the test's title marked `unproven`, whoever touched the test in between, so the
+   writer proves it and the validator audits it before it counts again; a stale entry is removed, and the row is judged on what remains — a row left empty is missing coverage. A
    test named in a `disputed` entry is never also listed by its plain title.
    A human settles a PENDING dispute by changing the contract line, the test or the product; the
    entry closes when that change shows in a later run, never by editing the entry alone. No
