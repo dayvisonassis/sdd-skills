@@ -33,7 +33,7 @@ adjusted, and only when the test is what is wrong.
 ## OUTPUT
 
 - New/expanded `tests/e2e/<profile>/*.spec.js`, each test tagged per rule S3.
-- A checklist `docs/<feature-id>-<kebab>/e2e-test.md` (planning may be Portuguese; test code follows rule S4) whose **coverage table** gives every row of the contract's `Test-suite hint` exactly one outcome from **the closed list in `pabx-rules.md` ("Coverage outcomes")** — rows this dispatch covers get their result, rows it does not touch keep what a previous dispatch wrote (or `not in this request` when new). The `evaluator`, `implement-feature` and the validator reject anything else. Without a feature, next to the spec with the same basename and `.e2e-test.md`.
+- A checklist `docs/<feature-id>-<kebab>/e2e-test.md` (planning may be Portuguese; test code follows rule S4) whose **coverage table** gives every row of the contract's `Test-suite hint` an outcome from **the closed list in `pabx-rules.md` ("Coverage outcomes")** — rows this dispatch covers get their result, rows it does not touch keep what a previous dispatch wrote (or `not in this request` when new), and **no `disputed` entry is ever removed by the writer** (only the `evaluator` closes a dispute). The `evaluator`, `implement-feature` and the validator reject anything else. Without a feature, next to the spec with the same basename and `.e2e-test.md`.
 - Per-batch execution result.
 - **One signal to the caller**, always one of: *done* (paths); **"not resolved — product diverges from `<ref>`: <observed>"** (with the path of every new test kept red); **"not resolved — environment: <which>"** (environment red, harness missing, a stack this skill does not cover, or tests written whose two proving runs could not happen — with their paths, marked unproven).
 - Production code, the harness and `tests/visual/` untouched.
@@ -109,7 +109,7 @@ happen stays `unproven`) → REPEAT.
 
 **Always:**
 - Follow `references/pabx-rules.md` exactly (boundary, harness, session, assertions, data, execution).
-- Tag every test per S3; every row of the test-suite hint carries exactly one outcome of the closed list in `pabx-rules.md`.
+- Tag every test per S3; every row of the test-suite hint carries an outcome of the closed list in `pabx-rules.md`, and `disputed` entries are left as they are.
 - Reuse the harness sessions and API fixtures; spend runs per rule E3 — two to prove a batch, one to verify a feature, never one per test.
 - Create the test's own records, its own customer before its own ticket, and remove them through the product; cleanup always runs and fails loudly.
 - Write test names, comments and variables in English; match product copy verbatim in locators and assertions.

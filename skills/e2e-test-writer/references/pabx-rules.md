@@ -246,14 +246,15 @@ rules bind every write the skill causes — the tests and the exploration that p
 ## Coverage outcomes — the closed list
 
 The writer's coverage table (`docs/<feature-id>-<kebab>/e2e-test.md`) gives every row of the
-contract's `Test-suite hint` it covers **exactly one** of these outcomes — except that a row's
-tests may sit next to `disputed` entries for individual tests of the same row. The `evaluator`,
-`implement-feature` and `e2e-test-validator` accept nothing else.
+contract's `Test-suite hint` it covers **one** of these outcomes. The single combination allowed
+is a row's test titles next to `disputed` entries for some of its tests — and a row may hold
+`disputed` entries alone. The `evaluator`, `implement-feature` and `e2e-test-validator` accept
+nothing else.
 
 | Outcome | Meaning |
 |---|---|
 | test titles | existing tests tagged per S3; marked `unproven` until both proving runs of the writer's Phase 3 happened |
-| `disputed — <test title> (<path>) — <contract line>` | one red test someone believes misreads the contract — the implementer, or the `evaluator` after disagreeing with the writer; left uncommitted; the row keeps its other tests |
+| `disputed — <test title> (<path>) — <contract line>` | one test someone believes misreads the contract — see **Disputes** below |
 | `not e2e-testable — telephony/hardware` | needs a real call, a device, a physical line |
 | `not e2e-testable — second tenant` | needs a tenant the harness accounts do not belong to |
 | `not e2e-testable — external credential` | needs a third-party credential the dev stack does not have |
@@ -261,6 +262,26 @@ tests may sit next to `disputed` entries for individual tests of the same row. T
 | `not e2e-testable — no removal path` | D5; `no removal path — harness lacks <fixture>` when an API fixture is missing |
 | `out of e2e scope — <suite>` | the behavior is not a flow (a computed value, a theme) — the contract mapped it to e2e by mistake |
 | `not in this request` | outside what this dispatch was asked to cover; a later dispatch keeps the rows it did not touch as they were |
+
+### Disputes
+
+A dispute is one test, named by its title **and** path, whose expectation someone believes the
+contract line does not support. Its lifecycle is the same wherever it starts:
+
+1. **Opened** by `implement-feature` (the writer said "product diverges", the code matches the
+   line) or by the `evaluator` (it disagreed with the writer's "product diverges"). The opener
+   writes the `disputed` entry; the test itself is committed or left as it is — the entry, not
+   the commit state, is what stops it being routed.
+2. **Counted** as a row outcome: a row whose only content is `disputed` entries awaits
+   arbitration and is **not** missing coverage — never dispatched to guard mode.
+3. **Arbitrated by the `evaluator` on every evaluation**, red or green:
+   - red, and the product diverges from the line → the test was right: code failure → `fix-runner`;
+   - red, and the product matches the line → PENDING for a human with both readings, never routed;
+   - green → the product and the test agree now: the dispute is moot.
+4. **Closed only by the `evaluator`** (a moot dispute, or a human's decision it records): it
+   replaces the entry with the plain test title. No writer ever removes a `disputed` entry.
+   Test files the SDD skills leave uncommitted are named in the evaluator's report for the human
+   to commit.
 
 ---
 
