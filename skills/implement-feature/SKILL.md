@@ -227,7 +227,7 @@ Read spec.md's Component Overview and, for every file listed, verify: the file e
 
 **6.3 — AC + Observable Criteria re-check**
 
-For each acceptance criterion loaded in Step 2, locate the test(s) mapped to it via spec.md's Testing Strategy. Run those tests fresh right now. Mark the AC ✓ only if the test passes. If the test no longer passes → mark ✗, add to `Regressions`.
+For each acceptance criterion loaded in Step 2, locate the test(s) mapped to it via spec.md's Testing Strategy. Run those tests fresh right now. Mark the AC ✓ only if the test passes. If the test no longer passes → mark ✗, add to `Regressions` — unless the failing test has a `disputed` entry: then mark the AC `disputed`, list it under `Deviations`, and leave it to the `evaluator`'s arbitration.
 
 **(v2) Additionally**, for each **Observable Criterion** in `contract.md` that is unit/integration-testable, confirm a test or check covers it. Observable criteria that require runtime exercise (UI rendering, redirects) are checked in 6.4; the rest should have coverage. ACs/criteria without mapped tests remain `—` (no test) — they will be the `evaluator`'s job.
 
@@ -256,7 +256,7 @@ If the environment cannot be brought up in this run, log each skipped smoke chec
 
 The run's final status is determined by this step, not by whether phases committed:
 
-- `success` — full suite + contract gates green (a test recorded as `disputed` excepted — its failure is the evaluator's to arbitrate), every Component Overview item present, every AC's test passes in 6.3, (when the project has an e2e suite) every row the test-suite hint maps to `e2e` carries an accepted outcome in the writer's coverage table (`disputed` entries included), every smoke check passed or soft-failed.
+- `success` — full suite + contract gates green (a test recorded as `disputed` excepted — its failure is the evaluator's to arbitrate), every Component Overview item present, every AC's test passes in 6.3 (or is `disputed`), (when the project has an e2e suite) every row the test-suite hint maps to `e2e` carries an accepted outcome in the writer's coverage table (`disputed` entries included), every smoke check passed or soft-failed.
 - `completed with regressions` — phases committed but 6.1 or 6.3 uncovered failures (including contract-gate failures) that the skill couldn't resolve.
 - `incomplete` — `Missing from spec` (6.2) is non-empty.
 - `aborted at phase <N>` — run stopped during Step 5 before reaching here.
