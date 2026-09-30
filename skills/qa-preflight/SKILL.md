@@ -201,7 +201,7 @@ red-before-fix proof, not a failure. The guard re-run is this skill's own: run t
 headless with the e2e config (`GATES.md`) — the headed rule is for the investigation, not for
 this check — after confirming the dev server rebuilt. Escalate the
 finding instead when the guard comes back green before the fix (it does not reproduce the
-defect — discard the file and its entries in the writer's checklist and coverage table, it guards nothing), when its validator verdict is FAIL, when it
+defect — remove only the guard test from its file and only its own entry from the writer's checklist and coverage table, it guards nothing), when its validator verdict is FAIL, when it
 answers "environment", or when it is still red after the `fix-runner` reported the correction
 applied — unless that re-run is red for an environment reason, which is reported as such. The
 guard file is left uncommitted and listed in the findings report, next to the fix's commit, for

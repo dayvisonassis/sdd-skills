@@ -270,18 +270,22 @@ contract line does not support. Its lifecycle is the same wherever it starts:
 
 1. **Opened** by `implement-feature` (the writer said "product diverges", the code matches the
    line) or by the `evaluator` (it disagreed with the writer's "product diverges"). The opener
-   writes the `disputed` entry; the test itself is committed or left as it is — the entry, not
-   the commit state, is what stops it being routed.
+   writes the `disputed` entry **in place of** the test's plain title in its row; the test itself
+   is committed or left as it is — the entry, not the commit state, is what stops it being routed.
 2. **Counted** as a row outcome: a row whose only content is `disputed` entries awaits
    arbitration and is **not** missing coverage — never dispatched to guard mode.
-3. **Arbitrated by the `evaluator` on every evaluation**, red or green:
+3. **Arbitrated by the `evaluator` on every evaluation** — in Step 4, from the e2e gate's run, so
+   the `gates only` override does not skip it:
    - red, and the product diverges from the line → the test was right: code failure → `fix-runner`;
    - red, and the product matches the line → PENDING for a human with both readings, never routed;
-   - green → the product and the test agree now: the dispute is moot.
-4. **Closed only by the `evaluator`** (a moot dispute, or a human's decision it records): it
-   replaces the entry with the plain test title. No writer ever removes a `disputed` entry.
-   Test files the SDD skills leave uncommitted are named in the evaluator's report for the human
-   to commit.
+   - green → the product and the test agree now: the dispute is moot;
+   - absent (no test at that title and path in the run) → the entry is stale.
+4. **Closed only by the `evaluator`**: a moot entry goes back to the plain test title; a stale
+   one is removed, and the row is judged on what remains — a row left empty is missing coverage.
+   A human settles a PENDING dispute by changing the contract line, the test or the product; the
+   entry closes when that change shows in a later run, never by editing the entry alone. No
+   writer ever removes a `disputed` entry. A test file a skill leaves uncommitted is named in that
+   skill's own report for the human to commit.
 
 ---
 

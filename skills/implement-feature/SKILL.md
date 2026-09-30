@@ -152,8 +152,8 @@ dispatch. Act on the writer's signal:
     test, and count it against the retry budget like any other hard fail. Never edit the
     writer's test to make it pass.
   - The code matches the line and the test does not → the writer read the contract wrongly.
-    Never bend production code to a wrong test: **open a dispute** — add
-    `disputed — <test title> (<path>) — <contract line>` to its coverage-table row, per the
+    Never bend production code to a wrong test: **open a dispute** — replace the test's title in its coverage-table row with
+    `disputed — <test title> (<path>) — <contract line>`, per the
     Disputes lifecycle of `../e2e-test-writer/references/pabx-rules.md` — record it under
     `Deviations`, and leave the arbitration to the `evaluator`. The test is committed with the
     phase like the rest of its file; the entry, not the commit state, stops it being routed. A
@@ -197,7 +197,7 @@ Warnings without non-zero exit are never failures.
 
 **5.4 — Commit**
 
-If validation passed (all hard fails resolved; only soft fails and pre-existing failures remain), stage only the files this phase touched and commit with a message summarizing the phase. Match the project's commit style by inspecting the last ~10 commit messages. Fallback: `feat(F<ID>): <phase name>`.
+If validation passed (all hard fails resolved; only soft fails, pre-existing failures and failures of a test with a `disputed` entry remain), stage only the files this phase touched and commit with a message summarizing the phase. Match the project's commit style by inspecting the last ~10 commit messages. Fallback: `feat(F<ID>): <phase name>`.
 
 Stage specific files only (no `git add -A` / `git add .`). Commit on the current branch. Do not skip hooks.
 
@@ -231,7 +231,7 @@ For each acceptance criterion loaded in Step 2, locate the test(s) mapped to it 
 
 **(v2) Additionally**, for each **Observable Criterion** in `contract.md` that is unit/integration-testable, confirm a test or check covers it. Observable criteria that require runtime exercise (UI rendering, redirects) are checked in 6.4; the rest should have coverage. ACs/criteria without mapped tests remain `—` (no test) — they will be the `evaluator`'s job.
 
-When the project has an e2e suite, a UI criterion whose behavior is a user flow counts as covered only by an e2e test tagged with its id — run them fresh here in **one run for the whole feature** (the e2e config from `GATES.md`, `--grep "@<feature-id>(?![\w-])"`), never one run per criterion, and map the results by tag. A flow criterion with no tagged test is `—`, not ✓, even if 6.4 exercised it by hand. **Every row the `Test-suite hint` maps to `e2e` must appear in the writer's coverage table** (`docs/<feature-id>-<kebab>/e2e-test.md`) with an outcome of the **closed list** in `../e2e-test-writer/references/pabx-rules.md` ("Coverage outcomes") — existing, proven tagged tests, or a `not e2e-testable` reason worded as that list words it. A row marked `unproven`, with any other reason, or with neither is a gap in this run's own work: dispatch `e2e-test-writer` for it now — and commit what it writes in a dedicated `test(F<ID>)` commit, since the phase commits are already made — or list it under `Missing from spec`, including when the stack could not be brought up to write it. A row the writer marks `out of e2e scope` is a contract mapping mistake, and a `disputed` entry awaits arbitration (a row holding only such entries is not a gap): list both under `Deviations` for the `evaluator`.
+When the project has an e2e suite, a UI criterion whose behavior is a user flow counts as covered only by an e2e test tagged with its id — run them fresh here in **one run for the whole feature** (the e2e config from `GATES.md`, `--grep "@<feature-id>(?![\w-])"`), never one run per criterion, and map the results by tag. A flow criterion with no tagged test is `—`, not ✓, even if 6.4 exercised it by hand. **Every row the `Test-suite hint` maps to `e2e` must appear in the writer's coverage table** (`docs/<feature-id>-<kebab>/e2e-test.md`) with an outcome of the **closed list** in `../e2e-test-writer/references/pabx-rules.md` ("Coverage outcomes") — existing, proven tagged tests, or a `not e2e-testable` reason worded as that list words it. A row with none of the accepted outcomes — including one marked `unproven` or carrying any other reason — is a gap in this run's own work: dispatch `e2e-test-writer` for it now — and commit what it writes in a dedicated `test(F<ID>)` commit, since the phase commits are already made — or list it under `Missing from spec`, including when the stack could not be brought up to write it. A row the writer marks `out of e2e scope` is a contract mapping mistake, and a `disputed` entry awaits arbitration (a row holding only such entries is not a gap): list both under `Deviations` for the `evaluator`.
 
 **6.4 — Environment smoke check (when applicable)**
 
