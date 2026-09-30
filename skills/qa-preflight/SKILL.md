@@ -198,9 +198,10 @@ One finding per dispatch — except an e2e-guarded defect, which is one **sequen
 escalated list with that reason — it is never silently dropped. **The e2e guard is the one
 exception:** its expected first answer *is* "not resolved — product diverges", and that is the
 red-before-fix proof, not a failure. The guard re-run is this skill's own: run that one test
-headless with the e2e config (`GATES.md`), after confirming the dev server rebuilt. Escalate the
+headless with the e2e config (`GATES.md`) — the headed rule is for the investigation, not for
+this check — after confirming the dev server rebuilt. Escalate the
 finding instead when the guard comes back green before the fix (it does not reproduce the
-defect — discard the file, it guards nothing), when its validator verdict is FAIL, when it
+defect — discard the file and its checklist row, it guards nothing), when its validator verdict is FAIL, when it
 answers "environment", or when it is still red after the `fix-runner` reported the correction
 applied — unless that re-run is red for an environment reason, which is reported as such. The
 guard file is left uncommitted and listed in the findings report, next to the fix's commit, for

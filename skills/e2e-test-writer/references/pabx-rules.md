@@ -246,13 +246,14 @@ rules bind every write the skill causes — the tests and the exploration that p
 ## Coverage outcomes — the closed list
 
 The writer's coverage table (`docs/<feature-id>-<kebab>/e2e-test.md`) gives every row of the
-contract's `Test-suite hint` it covers **exactly one** of these outcomes. The `evaluator`,
+contract's `Test-suite hint` it covers **exactly one** of these outcomes — except that a row's
+tests may sit next to `disputed` entries for individual tests of the same row. The `evaluator`,
 `implement-feature` and `e2e-test-validator` accept nothing else.
 
 | Outcome | Meaning |
 |---|---|
 | test titles | existing tests tagged per S3; marked `unproven` until both proving runs of the writer's Phase 3 happened |
-| `disputed — <contract line>` | a red test the implementer believes misreads the contract; left uncommitted for the `evaluator` to arbitrate |
+| `disputed — <test title> (<path>) — <contract line>` | one red test someone believes misreads the contract — the implementer, or the `evaluator` after disagreeing with the writer; left uncommitted; the row keeps its other tests |
 | `not e2e-testable — telephony/hardware` | needs a real call, a device, a physical line |
 | `not e2e-testable — second tenant` | needs a tenant the harness accounts do not belong to |
 | `not e2e-testable — external credential` | needs a third-party credential the dev stack does not have |
