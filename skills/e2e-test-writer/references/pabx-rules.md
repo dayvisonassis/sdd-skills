@@ -101,14 +101,13 @@ test.describe('F14 UI-01 — agent ticket surface', () => {
 
 The session comes from the `agent/` folder. The request is captured before the action that
 fires it, and the search is asserted to fire exactly once (V6). The precondition is asserted
-before the loop, so an empty result fails instead of
-passing vacuously. The filter is validated with a value that exists in the dev tenant — and
-**only reads**: `Acme` is customer 79 (see D1). For a term without digits the backend matches
-name **or** code, both shown in the row, so the assertion reads the whole row,
-case-insensitively. A term with digits breaks that pattern: the backend strips punctuation and
-compares the digits against documents (shown as stored, punctuation included) and against
-identity phones (not shown at all), so a correct result may not contain the typed term. Use letters-only terms and run
-tokens.
+before the loop, so an empty result fails instead of passing vacuously. The filter is validated
+with a value that exists in the dev tenant — and **only reads**: `Acme` is customer 79 (see
+D1). For a term without digits the backend matches name **or** code, both shown in the row, so
+the assertion reads the whole row, case-insensitively. A term with digits breaks that pattern:
+the backend strips punctuation and compares the digits against documents (shown as stored,
+punctuation included) and against identity phones (not shown at all), so a correct result may
+not contain the typed term. Use letters-only terms and run tokens.
 
 - **S1 — Location and name:** `tests/e2e/<profile>/<feature-id>-<surface-id>-<kebab>.spec.js`,
   lowercase (`tests/e2e/agent/f14-ui-01-agent-surface.spec.js`). A flow that starts on one
@@ -231,13 +230,36 @@ rules bind every write the skill causes — the tests and the exploration that p
   leak.
 - **D5 — No removal path, no creation.** If no harness session can remove what the flow
   creates, the test does not create it: cover the flow on existing data read-only, or mark the
-  behaviour `not e2e-testable — no removal path` in the checklist.
-- **D6 — Exploring a write flow obeys D1–D5 too.** Explore it only on records created for the
-  exploration through an API fixture and removed afterwards. **A submit that creates is either
-  captured and aborted with `page.route(...)` before it reaches the backend, or its captured
-  response id is removed afterwards** — otherwise the record it creates is one no teardown knows
-  about (and a customer with a live ticket refuses its own delete). Never submit against
-  pre-existing data to "see what it sends".
+  behaviour `not e2e-testable — no removal path` in the checklist (`no removal path — harness
+  lacks <fixture>` when the cause is a missing API fixture).
+- **D6 — Exploring a write flow obeys D1–D5 too.** An exploration session has no test fixtures:
+  create the records it needs through the backend API with the attached page's own token
+  (`localStorage.currentUser.token`, read from the live page — never from a storage-state file),
+  checking each status, and remove them the same way afterwards. **A submit that creates is
+  either captured and aborted with `page.route(...)` before it reaches the backend, or its
+  captured response id is removed afterwards** — otherwise the record it creates is one no
+  teardown knows about (and a customer with a live ticket refuses its own delete). Never submit
+  against pre-existing data to "see what it sends".
+
+---
+
+## Coverage outcomes — the closed list
+
+The writer's coverage table (`docs/<feature-id>-<kebab>/e2e-test.md`) gives every row of the
+contract's `Test-suite hint` it covers **exactly one** of these outcomes. The `evaluator`,
+`implement-feature` and `e2e-test-validator` accept nothing else.
+
+| Outcome | Meaning |
+|---|---|
+| test titles | existing tests tagged per S3; marked `unproven` until both proving runs of the writer's Phase 3 happened |
+| `disputed — <contract line>` | a red test the implementer believes misreads the contract; left uncommitted for the `evaluator` to arbitrate |
+| `not e2e-testable — telephony/hardware` | needs a real call, a device, a physical line |
+| `not e2e-testable — second tenant` | needs a tenant the harness accounts do not belong to |
+| `not e2e-testable — external credential` | needs a third-party credential the dev stack does not have |
+| `not e2e-testable — shared configuration` | would have to change pre-existing configuration other screens read (D1) — not configuration that is itself the record under test |
+| `not e2e-testable — no removal path` | D5; `no removal path — harness lacks <fixture>` when an API fixture is missing |
+| `out of e2e scope — <suite>` | the behavior is not a flow (a computed value, a theme) — the contract mapped it to e2e by mistake |
+| `not in this request` | outside what this dispatch was asked to cover; a later dispatch keeps the rows it did not touch as they were |
 
 ---
 
@@ -254,9 +276,10 @@ npm run gate:e2e-frontend
   (with `./dev.sh`, the frontend container's `docker logs`) for a compile error after the last
   edit. `ng serve` keeps serving the previous bundle after a failed build, with HTTP 200. A red
   run against a stale bundle is an environment problem, not a test failure.
-- **E3 — Spend runs, not logins, and spend few of either.** Every run is a whole batch, never
-  one test: **proving** a new batch takes two runs (inverted, then restored); **verifying** a
-  feature afterwards takes one (`--grep "@F14(?![\w-])"`), never one per criterion.
+- **E3 — Spend runs, not logins, and spend few of either.** Never one run per test of a
+  batch: **proving** a new batch takes two runs (inverted, then restored); **verifying** a
+  feature takes one (`--grep "@F14(?![\w-])"`), never one per criterion; a **correction**
+  re-runs just the failing test.
   A `429`, or every case failing on the sign-in screen, is the rate limiter — stop, say so, and
   never classify it as a product defect or re-run to "see if it passes".
 - **E4 — `retries: 0`.** A test that passes on the second try is a flaky test, and a flaky test

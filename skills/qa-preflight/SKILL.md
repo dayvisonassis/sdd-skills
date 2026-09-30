@@ -197,10 +197,14 @@ One finding per dispatch — except an e2e-guarded defect, which is one **sequen
 (guard, fix, guard re-run). If a correction comes back "not resolved", the finding moves to the
 escalated list with that reason — it is never silently dropped. **The e2e guard is the one
 exception:** its expected first answer *is* "not resolved — product diverges", and that is the
-red-before-fix proof, not a failure. Escalate the finding instead when the guard comes back
-green before the fix (it does not reproduce the defect), when its validator verdict is FAIL, when
-it answers "environment", or when it is still red after the `fix-runner` reported the correction
-applied.
+red-before-fix proof, not a failure. The guard re-run is this skill's own: run that one test
+headless with the e2e config (`GATES.md`), after confirming the dev server rebuilt. Escalate the
+finding instead when the guard comes back green before the fix (it does not reproduce the
+defect — discard the file, it guards nothing), when its validator verdict is FAIL, when it
+answers "environment", or when it is still red after the `fix-runner` reported the correction
+applied — unless that re-run is red for an environment reason, which is reported as such. The
+guard file is left uncommitted and listed in the findings report, next to the fix's commit, for
+the human to commit with the QA artifacts.
 
 ---
 
@@ -319,6 +323,6 @@ surface and its route when it has one, the QA case's expected result in `message
 judging it against that expected result — a `qa-finding` has no contract line. **Order it like
 a visual guard:** dispatch the guard before the fix — it must come back red ("product
 diverges") — then the `fix-runner`, then re-run the guard green. Confirm every test a writer
-returns with the matching test-validator, passing the feature's `contract.md` and the writer's
-checklist so the tags can be checked, before trusting it. Without an e2e suite, deliver the
+returns with the matching test-validator, passing the feature's `contract.md` (when it has
+one) and the writer's checklist so the tags can be checked, before trusting it. Without an e2e suite, deliver the
 flow ready in the findings report, like an assertion for a visual suite that is not enabled.

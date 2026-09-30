@@ -25,7 +25,7 @@ adjusted, and only when the test is what is wrong.
 ## INPUT
 
 - `feature` (required when a contract exists) — the feature folder's id (`F14`, `F08-v2`); locates `docs/<feature-id>-<kebab>/contract.md`.
-- `target` (required) — what to cover: contract surface ids (`UI-02`), criterion ids (`OC-08`), or a route for work outside a contract (then the route's slug stands in for the surface id in the file name and tags — rule S1). A report's `targetSurface` (`UI-01 /agent-dashboard/tickets`, or `UI-02` alone) is a surface id optionally followed by its route. When the caller names specific behaviors, only those are in scope; otherwise every flow behavior of the surface is.
+- `target` (required) — what to cover: contract surface ids (`UI-02`), criterion ids (`OC-08`), or a route for work outside a contract (then the route's slug stands in for the surface id in the file name and tags — rule S1). A report's `targetSurface` is a surface id optionally followed by its route (`UI-01 /agent-dashboard/tickets`, or `UI-02` alone), or a route alone when there is no contract. When the caller names specific behaviors, only those are in scope; otherwise every flow behavior of the surface is.
 - `mode` (optional) — `interactive` (default when a user calls) or `autonomous` (set by implement-feature/evaluator/qa-preflight).
 - `test_file_path` / `profile` (`admin` | `agent`) / `batch_size` (optional; default 4, range 3–5).
 - `evaluation_report` (optional) — its `kind: test` entry selects the mode: an existing `testFile` → **correction mode**; a `testFile` that does not exist yet, or none → **guard mode**.
@@ -33,7 +33,7 @@ adjusted, and only when the test is what is wrong.
 ## OUTPUT
 
 - New/expanded `tests/e2e/<profile>/*.spec.js`, each test tagged per rule S3.
-- A checklist `docs/<feature-id>-<kebab>/e2e-test.md` (planning may be Portuguese; test code follows rule S4) whose **coverage table** maps every in-scope row of the contract's `Test-suite hint` to exactly one of: its test titles (marked `unproven` until both proving runs of Phase 3 happened); `not e2e-testable — <reason>` with a reason **from the closed list** of Phase 2; `out of e2e scope — <suite>` when the contract mapped to e2e something the Boundary table puts elsewhere; or `not in this request`. The `evaluator` and `implement-feature` read this table and reject anything else. Without a feature, next to the spec with the same basename and `.e2e-test.md`.
+- A checklist `docs/<feature-id>-<kebab>/e2e-test.md` (planning may be Portuguese; test code follows rule S4) whose **coverage table** gives every row of the contract's `Test-suite hint` exactly one outcome from **the closed list in `pabx-rules.md` ("Coverage outcomes")** — rows this dispatch covers get their result, rows it does not touch keep what a previous dispatch wrote (or `not in this request` when new). The `evaluator`, `implement-feature` and the validator reject anything else. Without a feature, next to the spec with the same basename and `.e2e-test.md`.
 - Per-batch execution result.
 - **One signal to the caller**, always one of: *done* (paths); **"not resolved — product diverges from `<ref>`: <observed>"** (with the path of every new test kept red); **"not resolved — environment: <which>"** (environment red, harness missing, a stack this skill does not cover, or tests written whose two proving runs could not happen — with their paths, marked unproven).
 - Production code, the harness and `tests/visual/` untouched.
@@ -73,18 +73,16 @@ see the rule above.
 2. Environment preflight (rule E2): frontend answers, backend answers, **the dev server's last build succeeded** (read its log). Any failure → return **"not resolved — environment: <which>"**.
 3. Read the contract: the target surfaces (initial state, behaviors), the observable criteria, the test-suite hint. Keep the in-scope behaviors that are **flows**; list the rest as out of scope with the suite they belong to (Boundary table in `pabx-rules.md`).
 4. Read existing `tests/e2e/` for helpers and to avoid duplicating a flow already covered.
-5. Explore each flow live with `playwright-cli`, **through a harness run** — `--config playwright.e2e.config.js --debug=cli` on a test of the right profile (its seed, for instance), then `attach` — so the stored session is reused, never a fresh login. **A write flow is explored under rule D6**: on records created for the exploration through an API fixture and removed afterwards, or with the request captured and aborted by `page.route(...)`. Note the locators and the requests each action fires.
+5. Explore each flow live with `playwright-cli`, **through a harness run** — `--config playwright.e2e.config.js --debug=cli` on a test of the right profile (its seed, for instance), then `attach` — so the stored session is reused, never a fresh login. **A write flow is explored under rule D6**: the attached page has no test fixtures, so create and remove the exploration's records through the API with the page's own token, or capture the request and abort it with `page.route(...)`. Note the locators and the requests each action fires.
 6. For every flow that writes: what it creates (its own customer before its own ticket), what pre-existing configuration it only references, which API fixture removes it, and through which delete route (rules D1–D5).
 
 ### Phase 2 — Checklist Creation
 One row per behavior: contract id, profile, precondition data (existing, or created by the
 test), action, observable result, request assertion (V6), cleanup and its fixture. A flow that
-cannot be e2e gets `not e2e-testable — <reason>`, and the reason comes **only from this closed
-list** — the `evaluator` rejects any other: telephony/hardware; a second tenant; an external
-credential; shared configuration the flow would have to create or change (D1); no removal path
-(D5) — written `no removal path — harness lacks <fixture>` when the cause is a missing API
-fixture. Such rows stay with the evaluator or the human QA. A behavior that is not a flow at all
-(a computed value, a theme) gets `out of e2e scope — <suite>`, never a `not e2e-testable` reason.
+cannot be e2e gets a `not e2e-testable` outcome, and a behavior that is not a flow at all (a
+computed value, a theme) gets `out of e2e scope — <suite>` — both **only as the closed list in
+`pabx-rules.md` words them**; any other wording is rejected downstream and burns an attempt.
+Such rows stay with the evaluator or the human QA.
 - **Interactive:** ask — is every flow behavior covered? does any test write without a removal path? is any filter validated with an empty result? → **WAIT for approval.**
 - **Autonomous / correction / guard:** skip the checkpoint; proceed.
 
@@ -102,7 +100,7 @@ happen stays `unproven`) → REPEAT.
 2. Re-check the environment (E2/E3). A stale bundle, a `429` or every case on the sign-in screen → return **"not resolved — environment: <which>"**; do not touch the test.
 3. Run only the failing test with `--config playwright.e2e.config.js --debug=cli`, attach, and diagnose.
 4. Decide, and act on exactly one:
-   - **The test is wrong** (selector drift, timing, wrong expectation against the contract, leaked data) → fix the smallest footprint, run it, return *done*.
+   - **The test is wrong** (selector drift, timing, wrong expectation against the contract, leaked data) → fix the smallest footprint, run it, return *done*. If the fixed test is still red and the product is what diverges, return "product diverges" instead (the rule under Invocation Modes).
    - **The product diverges from the contract** → return **"not resolved — product diverges from `<ref>`: <observed>"**, quoting the contract line, so the caller re-routes it as code. Never weaken the assertion (rule V8).
 
 ---
@@ -111,7 +109,7 @@ happen stays `unproven`) → REPEAT.
 
 **Always:**
 - Follow `references/pabx-rules.md` exactly (boundary, harness, session, assertions, data, execution).
-- Tag every test per S3; every in-scope row of the test-suite hint ends in the coverage table as tests or as a written reason.
+- Tag every test per S3; every row of the test-suite hint carries exactly one outcome of the closed list in `pabx-rules.md`.
 - Reuse the harness sessions and API fixtures; spend runs per rule E3 — two to prove a batch, one to verify a feature, never one per test.
 - Create the test's own records, its own customer before its own ticket, and remove them through the product; cleanup always runs and fails loudly.
 - Write test names, comments and variables in English; match product copy verbatim in locators and assertions.

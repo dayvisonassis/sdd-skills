@@ -220,7 +220,7 @@ Produce `contract.md` using `references/contract-template.md`. It has four block
 least one Observable Criterion (or a gate, when the AC is purely technical). The gate/criterion
 `id`s are the same `ref` values the `evaluator` will cite in `evaluation-report.json`.
 
-**Test-suite hint (PABX monorepo):** when the project has distinct test suites (e.g. the PABX
+**Test-suite hint:** when the project has distinct test suites (e.g. the PABX
 monorepo — unit / integration / monorepo-unit / e2e), fill the contract's `Test-suite hint`
 table: which suite covers each surface. It tells `implement-feature` which test-writer to
 dispatch and helps the `evaluator` route a failure.

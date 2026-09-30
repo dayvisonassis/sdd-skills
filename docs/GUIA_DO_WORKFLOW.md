@@ -233,10 +233,11 @@ com a linha do contrato. Se o produto diverge mesmo, reclassifica como código e
 `fix-runner`; se não, é desacordo sobre o contrato e vira **PENDING** para um humano.
 
 **Cobertura e2e que falta também é falha.** Toda linha da dica de suíte mapeada para e2e
-precisa aparecer na tabela de cobertura da writer (`docs/<feature>/e2e-test.md`), com teste ou
-com motivo da lista fechada (telefonia/hardware, segundo tenant, credencial externa, sem
-caminho de remoção). Sem isso, o evaluator manda a `e2e-test-writer` escrever o teste (modo
-guarda) — **só no PABX**, a única stack que ela cobre; fora dele, vira PENDING para um humano.
+precisa aparecer na tabela de cobertura da writer (`docs/<feature>/e2e-test.md`) com um
+desfecho da **lista fechada** do `pabx-rules.md` da writer: teste já provado (um marcado
+`unproven` não conta), motivo "not e2e-testable" (telefonia/hardware, segundo tenant, credencial
+externa, configuração compartilhada, sem caminho de remoção), `out of e2e scope` ou `disputed`.
+Sem isso, o evaluator manda a `e2e-test-writer` escrever o teste (modo guarda) — **só no PABX**, a única stack que ela cobre; fora dele, vira PENDING para um humano.
 "Ter suíte e2e" significa sempre a mesma coisa: o `GATES.md` lista um gate e2e **já provado
 verde**.
 

@@ -26,7 +26,7 @@ Everything below applies unchanged, plus the `qa-finding` kind.
       "testSuite": "unit | integration | monorepo | e2e",
       "testFile": "apps/.../*.spec.ts | *.test.js | *.test.ts | test_*.py | tests/e2e/.../*.spec.js",
       "targetFile": "apps/.../<source under test>",
-      "targetSurface": "<e2e only: contract surface id [+ route] — e.g. UI-01 /agent-dashboard/tickets>"
+      "targetSurface": "<e2e only: contract surface id [+ route], or a route alone without a contract — e.g. UI-01 /agent-dashboard/tickets>"
     }
   ]
 }
