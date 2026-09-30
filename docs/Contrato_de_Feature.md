@@ -281,6 +281,12 @@ flowchart TD
     style DOC fill:#e3f2fd,stroke:#1565c0
 ```
 
+Um quinto bloco, a **dica de suíte** (`Test-suite hint`), diz qual suíte cobre cada surface. É
+opcional, exceto quando o projeto tem suíte **e2e**: aí todo comportamento de UI precisa cair
+em exatamente uma linha — **fluxo** (o usuário age, algo observável acontece) → e2e; **valor
+medido** (contraste, altura, densidade) → gate visual; **inalcançável por automação**
+(telefonia, hardware, segundo tenant) → `runtime-only`, conferido à mão pelo `evaluator`.
+
 ### Esboço de seções (template)
 
 ```markdown
@@ -354,6 +360,7 @@ flowchart LR
 - [ ] Traz um **manifesto de cobertura** mapeando comportamentos a surfaces com IDs (ex.: `Public-01`)?
 - [ ] Organiza a cobertura por **surfaces**, cada uma com **estado inicial** e comportamentos concretos?
 - [ ] Expressa cada aceitação como **critério observável** (evidência verificável), não como descrição vaga?
+- [ ] Se o projeto tem suíte e2e: todo comportamento de UI está na **dica de suíte** como e2e, gate visual ou `runtime-only`?
 - [ ] Serve **tanto** ao agente implementador **quanto** à skill de validação — alinhando construção e aceitação?
 
 > Quando todos os itens estiverem marcados, o `contract.md` deixa de ser um complemento e

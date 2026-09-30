@@ -1,6 +1,6 @@
 ---
 name: implement-feature
-description: Implements a feature autonomously based on its spec, plan, AND contract.md, committing one commit per phase, satisfying the contract's quality gates and observable criteria, writing progress.json, and reporting results against the feature's acceptance criteria. Delegates test writing to the matching test-writer skill (unit/integration/monorepo) by path/stack when the project fits, and falls back to writing tests itself otherwise.
+description: Implements a feature autonomously based on its spec, plan, AND contract.md, committing one commit per phase, satisfying the contract's quality gates and observable criteria, writing progress.json, and reporting results against the feature's acceptance criteria. Delegates test writing to the matching test-writer skill (unit/integration/monorepo/e2e) by path/stack when the project fits, and falls back to writing tests itself otherwise.
 ---
 
 # Implement Feature
@@ -132,14 +132,47 @@ writing them inline, choosing the suite deterministically by the test's path/sta
 - `*.spec.ts` in `apps/frontend/` **or** `*.test.js` in `apps/backend/__tests__/unit/` → **`unit-test-writer`**
 - any file under `apps/backend/__tests__/integration/` → **`integration-test-writer`**
 - any other app under `apps/` (`*.test.ts` or `test_*.py`) → **`monorepo-unit-test-writer`**
+- any file under `tests/e2e/` → **`e2e-test-writer`**
 
 Pass the `target_file` and the phase context. The test-writer applies the project's testing
 rules and returns; keep implementing the phase.
 
-**Generic fallback:** if the project is **not** the PABX monorepo (no `apps/` layout) or the
-stack matches none of the three writers (e.g. Go, Rust, Python non-FastAPI), **write the tests
-yourself** as before. Record in `Deviations` that the generic fallback was used (which files,
-why no test-writer applied).
+**e2e is dispatched per surface, not per file.** When the project is the PABX monorepo, has an
+e2e suite (`GATES.md` lists an e2e gate proven green) and the contract's test-suite hint maps a
+surface to `e2e`, dispatch `e2e-test-writer` with the feature ID and the surface ids as
+`target` — **in the phase that makes that flow work end to end** (UI and API both in place),
+once its code is written and before that phase's commit (5.4), so the tests land in the same
+commit; never earlier: an e2e test written against a half-built flow can only be red or wrong.
+It needs the stack running (Environment Contract); bring it up rather than skipping the
+dispatch. Act on the writer's signal:
+- **done** → keep implementing.
+- **"not resolved — product diverges from `<ref>`"** → do not take it on faith: re-read the
+  contract line it quotes against what the code does.
+  - The code diverges from that line → a **hard fail** of the phase. Fix the code, re-run that
+    test, and count it against the retry budget like any other hard fail. Never edit the
+    writer's test to make it pass.
+  - The code matches the line and the test does not → the writer read the contract wrongly.
+    Never bend production code to a wrong test: **open a dispute** — replace the test's title in its coverage-table row with
+    `disputed — <test title> (<path>) — <contract line>`, per the
+    Disputes lifecycle of `../e2e-test-writer/references/pabx-rules.md` — record it under
+    `Deviations`, and leave the arbitration to the `evaluator`. The test is committed with the
+    phase like the rest of its file; the entry, not the commit state, stops it being routed. A
+    dispute does not block `success`, and the e2e gate's failure on that test is excluded from
+    the retries of 5.3 and 6.1.
+- **"not resolved — environment: <which>"** → first read the dev server's log: a build broken by
+  this run's own code is a **hard fail** of the phase, not an environment problem. Otherwise
+  soft-fail the e2e gate by id and list the surface's rows under `Missing from spec`, so the run
+  cannot end as `success`. Tests it returns as unproven stay marked `unproven` in its coverage
+  table and count as missing.
+
+**Generic fallback:** if the project is **not** the PABX monorepo (no `apps/frontend` +
+`apps/backend` layout) or the stack matches none of the four writers (e.g. Go, Rust, Python
+non-FastAPI), **write the tests yourself** as before. Record in `Deviations` that the generic
+fallback was used (which files, why no test-writer applied). When such a project has an e2e
+suite, also write what the checks below read: each e2e test tagged with the feature tag
+(`@<feature-id>`) and the ids of the surfaces it touches, and the coverage table
+(`docs/<feature-id>-<kebab>/e2e-test.md`: each e2e row of the test-suite hint → its test titles
+or a reason from the closed list in 6.3).
 
 Adapt when reality diverges from the spec (column named `pinned` in DB vs `isPinned` in spec, different component file name, slightly different path, structurally compatible types). Specs are never 100% faithful to reality — adaptation is expected. Record every adaptation in a `Deviations` list. Do NOT abort on minor divergences.
 
@@ -156,13 +189,15 @@ Discover validation commands at runtime: inspect `package.json` `scripts`, or fo
 
 - **Hard fail** = non-zero exit from lint, typecheck, unit tests, or a **contract quality gate**, where the failure is attributable to code this run changed. Retry up to the configured limit (default 3). Each retry reads the error, adjusts the code, re-runs. After the limit, abort the whole run and go to Step 6.
 - **Soft fail** = validation cannot execute in this environment (e2e requiring browser/server not present; integration test requiring an external credential not set; suite explicitly marked non-runnable; command not found). Skip, log under `Soft-fails`, proceed.
+  - **"Not present" means it could not be brought up, not that it was not tried.** When the project has an e2e suite (`GATES.md` lists an e2e gate proven green) and the contract declares it, bring the stack up per the Environment Contract before soft-failing it. If it still cannot run, log the gate **by id** as unverified — the `evaluator` will enforce it — and note that the e2e tests it needs could not be written either, so the run cannot end as `success` (see 6.5). Once the stack is up, a failing e2e test attributable to this run's code is a **hard fail** like any other gate.
+  - **Before re-running a browser gate (e2e or visual) after an edit**, confirm in the dev server's log that the rebuild finished successfully — a failed build keeps serving the previous bundle with HTTP 200, and the re-run would measure old code. A `429` or every case on the sign-in screen is the auth rate limit: stop re-running, soft-fail the gate by id, and never count it as a retry of your code. Each run costs the harness its logins.
 - **Pre-existing failure** = validation fails but the failure is not attributable to code this run changed. Log under `Pre-existing failures`, do NOT count against the retry budget, proceed.
 
 Warnings without non-zero exit are never failures.
 
 **5.4 — Commit**
 
-If validation passed (all hard fails resolved; only soft fails and pre-existing failures remain), stage only the files this phase touched and commit with a message summarizing the phase. Match the project's commit style by inspecting the last ~10 commit messages. Fallback: `feat(F<ID>): <phase name>`.
+If validation passed (all hard fails resolved; only soft fails, pre-existing failures and failures of a test with a `disputed` entry remain), stage only the files this phase touched and commit with a message summarizing the phase. Match the project's commit style by inspecting the last ~10 commit messages. Fallback: `feat(F<ID>): <phase name>`.
 
 Stage specific files only (no `git add -A` / `git add .`). Commit on the current branch. Do not skip hooks.
 
@@ -192,9 +227,11 @@ Read spec.md's Component Overview and, for every file listed, verify: the file e
 
 **6.3 — AC + Observable Criteria re-check**
 
-For each acceptance criterion loaded in Step 2, locate the test(s) mapped to it via spec.md's Testing Strategy. Run those tests fresh right now. Mark the AC ✓ only if the test passes. If the test no longer passes → mark ✗, add to `Regressions`.
+For each acceptance criterion loaded in Step 2, locate the test(s) mapped to it via spec.md's Testing Strategy. Run those tests fresh right now. Mark the AC ✓ only if the test passes. If the test no longer passes → mark ✗, add to `Regressions` — unless the failing test has a `disputed` entry: then mark the AC `disputed`, list it under `Deviations`, and leave it to the `evaluator`'s arbitration.
 
 **(v2) Additionally**, for each **Observable Criterion** in `contract.md` that is unit/integration-testable, confirm a test or check covers it. Observable criteria that require runtime exercise (UI rendering, redirects) are checked in 6.4; the rest should have coverage. ACs/criteria without mapped tests remain `—` (no test) — they will be the `evaluator`'s job.
+
+When the project has an e2e suite, a UI criterion whose behavior is a user flow counts as covered only by an e2e test tagged with its id — run them fresh here in **one run for the whole feature** (the e2e config from `GATES.md`, `--grep "@<feature-id>(?![\w-])"`), never one run per criterion, and map the results by tag. A flow criterion with no tagged test is `—`, not ✓, even if 6.4 exercised it by hand. **Every row the `Test-suite hint` maps to `e2e` must appear in the writer's coverage table** (`docs/<feature-id>-<kebab>/e2e-test.md`) with an outcome of the **closed list** in `../e2e-test-writer/references/pabx-rules.md` ("Coverage outcomes") — existing, proven tagged tests, or a `not e2e-testable` reason worded as that list words it. A row with none of the accepted outcomes — including one marked `unproven` or carrying any other reason — is a gap in this run's own work: dispatch `e2e-test-writer` for it now — and commit what it writes in a dedicated `test(F<ID>)` commit, since the phase commits are already made — or list it under `Missing from spec`, including when the stack could not be brought up to write it. A row the writer marks `out of e2e scope` is a contract mapping mistake, and a `disputed` entry awaits arbitration (a row holding only such entries is not a gap): list both under `Deviations` for the `evaluator`.
 
 **6.4 — Environment smoke check (when applicable)**
 
@@ -219,7 +256,7 @@ If the environment cannot be brought up in this run, log each skipped smoke chec
 
 The run's final status is determined by this step, not by whether phases committed:
 
-- `success` — full suite + contract gates green, every Component Overview item present, every AC's test passes in 6.3, every smoke check passed or soft-failed.
+- `success` — full suite + contract gates green (a test recorded as `disputed` excepted — its failure is the evaluator's to arbitrate), every Component Overview item present, every AC's test passes in 6.3 (or is `disputed`), (when the project has an e2e suite) every row the test-suite hint maps to `e2e` carries an accepted outcome in the writer's coverage table (`disputed` entries included), every smoke check passed or soft-failed.
 - `completed with regressions` — phases committed but 6.1 or 6.3 uncovered failures (including contract-gate failures) that the skill couldn't resolve.
 - `incomplete` — `Missing from spec` (6.2) is non-empty.
 - `aborted at phase <N>` — run stopped during Step 5 before reaching here.
@@ -314,7 +351,7 @@ If aborted, the report still lists whatever committed phases achieved and clearl
 - Adapt to minor spec/code divergences; log every adaptation under `Deviations`.
 - Run validation after each phase, including the contract's Quality Gates; differentiate hard-fail (retry ≤ limit) from soft-fail (skip + log) from pre-existing failure (log, don't retry).
 - Before claiming a phase is "done": confirm every file listed for that phase exists with the described content AND validation has passed. Writing code without running it is never "done".
-- Delegate test writing to the matching test-writer (by path/stack, autonomous mode) when the project fits; otherwise write the tests yourself (generic fallback) and log it under `Deviations`.
+- Delegate test writing to the matching test-writer (by path/stack, autonomous mode; e2e by contract surface) when the project fits; otherwise write the tests yourself (generic fallback) and log it under `Deviations`.
 - For phases that produce runtime surfaces, actually exercise them against a local environment (per the contract's Environment Contract) before claiming done, or soft-fail the runtime check.
 - Execute Step 6 (Final Verification) in full, including all contract Quality Gates, before reporting.
 - Write `progress.json` (Step 7) on completion; set `PENDING_EVALUATION` on success.

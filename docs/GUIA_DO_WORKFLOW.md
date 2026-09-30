@@ -64,16 +64,17 @@ flowchart TD
 | **fix-runner** | **Você não chama** — só o `evaluator` ou o `qa-preflight` | `evaluation-report.json` (código) | correção de código + commit | quem o chamou (reavaliação) |
 | **qa-preflight** | Feature **pronta**, antes de entregar ao QA | feature + spec/contract + tela no ar | plano de QA (`.md` + `.csv`) + relatório de achados | **fix-runner** (código) / **test-writer** (teste) |
 | **unit/integration/monorepo-unit-test-writer** | Escrita/correção de testes (PABX) | `target_file` (ou `evaluation-report.json` no fix) | testes escritos/corrigidos | — |
-| **unit/integration/monorepo-unit-test-validator** | Auditar testes (PABX) | `test_file_path` | relatório de conformidade (PASS/FAIL) | — |
+| **e2e-test-writer** | Escrita/correção de testes de fluxo no navegador (PABX) | feature + superfície do contrato (ou `evaluation-report.json` no fix) | testes em `tests/e2e/` | — |
+| **unit/integration/monorepo-unit/e2e-test-validator** | Auditar testes (PABX) | `test_file_path` | relatório de conformidade (PASS/FAIL) | — |
 
 > 🔑 Você invoca diretamente as skills do fluxo, **exceto `fix-runner`** (só o `evaluator` e o
 > `qa-preflight` o chamam). O **`qa-preflight` é sempre invocado por você**, nunca por outra
 > skill — ele roda quando a feature está pronta, não durante a implementação.
 > As **test-writers/validators** você pode chamar direto (modo interativo, com aprovação) **ou**
-> elas são chamadas automaticamente pelo `implement-feature` (escrita) e pelo `evaluator`
-> (correção de teste, modo autônomo).
-> ⚠️ As 6 skills de teste assumem a estrutura do **monorepo PABX** (`apps/frontend`, `apps/backend`,
-> `apps/*`) — ver a nota de escopo no fim.
+> elas são chamadas automaticamente pelo `implement-feature` (escrita), pelo `evaluator`
+> (correção de teste, modo autônomo) e pelo `qa-preflight` (teste que faltava).
+> ⚠️ As 8 skills de teste assumem a estrutura do **monorepo PABX** (`apps/frontend`, `apps/backend`,
+> `apps/*`, `tests/e2e`) — ver a nota de escopo no fim.
 
 ---
 
@@ -221,7 +222,24 @@ Quando o `evaluator` acha uma falha, ele **classifica e roteia**:
 
 **A suíte é escolhida pelo caminho do teste** (regra determinística):
 `apps/frontend/*.spec.ts` ou `apps/backend/__tests__/unit/*.test.js` → **unit**;
-`apps/backend/__tests__/integration/` → **integration**; demais `apps/` → **monorepo**.
+`apps/backend/__tests__/integration/` → **integration**; demais `apps/` → **monorepo**;
+`tests/e2e/` → **e2e**. (`tests/visual/` não é de nenhuma test-writer: é do gate visual.)
+
+**Falha de e2e tem uma terceira causa, conferida primeiro: o ambiente.** Limite de login
+(`429`), todos os casos na tela de login, app fora do ar ou bundle velho viram **PENDING**, sem
+corretor. E a `e2e-test-writer` pode devolver "o produto diverge do contrato" em vez de mexer
+na asserção. O evaluator **não aceita a palavra dela**: observa o critério de novo e compara
+com a linha do contrato. Se o produto diverge mesmo, reclassifica como código e manda ao
+`fix-runner`; se não, é desacordo sobre o contrato e vira **PENDING** para um humano.
+
+**Cobertura e2e que falta também é falha.** Toda linha da dica de suíte mapeada para e2e
+precisa aparecer na tabela de cobertura da writer (`docs/<feature>/e2e-test.md`) com um
+desfecho da **lista fechada** do `pabx-rules.md` da writer: teste já provado (um marcado
+`unproven` não conta), motivo "not e2e-testable" (telefonia/hardware, segundo tenant, credencial
+externa, configuração compartilhada, sem caminho de remoção), `out of e2e scope` ou `disputed`.
+Sem isso, o evaluator manda a `e2e-test-writer` escrever o teste (modo guarda) — **só no PABX**, a única stack que ela cobre; fora dele, vira PENDING para um humano.
+"Ter suíte e2e" significa sempre a mesma coisa: o `GATES.md` lista um gate e2e **já provado
+verde**.
 
 O **loop e o contador N são sempre do evaluator** — o sub-loop de teste
 (writer→validator) consome o mesmo orçamento de tentativas.
@@ -379,8 +397,8 @@ flowchart TD
 | evaluator | ✅ sim | ✅ **fix-runner** (código) / **test-writer**→**test-validator** (teste) |
 | **qa-preflight** | ✅ sim — **sempre você**, com a feature pronta | ✅ **fix-runner** (código) / **test-writer** (teste) |
 | **fix-runner** | ❌ **não** — só o evaluator ou o qa-preflight | ✅ devolve a quem o chamou |
-| test-writer (unit/integration/monorepo) | ✅ sim (interativo) ou via skill (autônomo) | não |
-| test-validator (unit/integration/monorepo) | ✅ sim ou via evaluator | não |
+| test-writer (unit/integration/monorepo/e2e) | ✅ sim (interativo) ou via skill (autônomo) | não |
+| test-validator (unit/integration/monorepo/e2e) | ✅ sim ou via evaluator | não |
 
 ---
 
@@ -404,18 +422,28 @@ flowchart TD
 
 ## Escopo das skills de teste (PABX)
 
-As 6 skills de teste (`unit`/`integration`/`monorepo-unit`-`test-writer`/`validator`) foram
-extraídas de prompts maduros do **monorepo PABX** e assumem sua estrutura:
+As 8 skills de teste (`unit`/`integration`/`monorepo-unit`/`e2e`-`test-writer`/`validator`)
+assumem a estrutura do **monorepo PABX**:
 
 - **unit-test-*** → `apps/frontend/` (Angular, `.spec.ts`) e `apps/backend/__tests__/unit/` (Node, `.test.js`).
 - **integration-test-*** → `apps/backend/__tests__/integration/` (Jest + supertest, DB de teste real).
 - **monorepo-unit-test-*** → demais `apps/` (node-express / node-worker / python-fastapi).
+- **e2e-test-*** → `tests/e2e/` (`@playwright/test` contra o app no ar; um fluxo por teste — ação
+  e resultado observável). Não mede valor computado: isso é do gate visual (`tests/visual/`).
+
+**Quem constrói o quê no e2e:** a infraestrutura (config do runner, sessão reaproveitada, teste
+semente, entrada no `runGate`) é do **`gate-builder`**; os testes de cada feature são da
+**`e2e-test-writer`**, despachada por superfície do contrato. O `gate-builder` nunca escreve
+testes de feature nem regras de teste — essas são decisões do time, registradas no
+`references/pabx-rules.md` da writer.
 
 As **regras hiper-específicas** (mock de jQuery/localStorage, padrão `Promise.all()`,
 `setupTestDatabase`/ordem de FK, mock de GPU/torch, `NODE_ENV=testing`) vivem em
-`references/pabx-rules.md` de cada skill. **Cada skill tem dois modos:** interativo (3 fases +
-aprovação) quando você chama direto; autônomo (sem pausa) quando `implement-feature`/`evaluator`
-as chamam.
+`references/pabx-rules.md` de cada skill. **Cada writer tem dois modos de execução:**
+interativo (3 fases + aprovação) quando você chama direto; autônomo (sem pausa) quando
+`implement-feature`/`evaluator`/`qa-preflight` as chamam. Com um `evaluation-report.json`, a
+writer entra em **modo de correção** (corrige só o teste apontado); a `e2e-test-writer` tem
+ainda o **modo guarda** (o relatório aponta um fluxo sem teste, e ela escreve o que falta).
 
 > **Projeto não-PABX?** O `implement-feature` detecta e usa o **fallback genérico** (escreve os
 > testes ele mesmo); as skills de teste são específicas do PABX. Para adaptar a outro monorepo,

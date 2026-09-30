@@ -150,8 +150,10 @@ Uma por achado, para o defeito não voltar sem ninguém perceber.
 
 <a asserção pronta para colar na suíte visual, ou a regra de gate, ou o teste que faltava>
 
-**Onde entra:** <suíte visual | regra do gate de estilos | teste unitário/integração>
-**Estado:** proposta — só é escrita automaticamente quando o gate visual está ligado.
+**Onde entra:** <suíte visual | regra do gate de estilos | teste unitário/integração | teste e2e>
+**Estado:** <escrita (arquivo) | proposta> — asserção visual só é escrita quando o gate visual
+está ligado; teste e2e, quando o projeto tem suíte e2e (escrito pela `e2e-test-writer`); teste
+unitário ou de integração, pela test-writer da suíte; regra de gate fica sempre como proposta.
 ```
 
 ---

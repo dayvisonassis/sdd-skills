@@ -149,9 +149,10 @@ failures:
     location: <arquivo:linha | rota | comando>
     evidence: <log | caminho do screenshot>
     # quando kind == test:
-    testSuite: unit | integration | monorepo
+    testSuite: unit | integration | monorepo | e2e
     testFile: <caminho do teste que falhou>
     targetFile: <fonte de produção coberta>
+    targetSurface: <superfície do contrato [+ rota, quando tiver] — só e2e>
 ```
 
 - `kind: gate | observable-criterion` (**código**) → `fix-runner`.
@@ -160,7 +161,9 @@ failures:
 
 **Seleção determinística da suíte** (o evaluator deriva de `testFile`):
 `apps/frontend/*.spec.ts` ou `apps/backend/__tests__/unit/*.test.js` → `unit`;
-`apps/backend/__tests__/integration/` → `integration`; demais `apps/` → `monorepo`.
+`apps/backend/__tests__/integration/` → `integration`; demais `apps/` → `monorepo`;
+`tests/e2e/` → `e2e`. Em e2e, o **ambiente é descartado antes** de classificar a falha como
+teste ou código — limite de login, tela de login ou bundle velho viram PENDING.
 
 ### 4.3 `fix-runner` → `evaluator` (devolução — código)
 O `fix-runner` commita a correção de **código**, registra a tentativa no `progress.json` e
@@ -172,6 +175,14 @@ Para `kind: test`, o evaluator chama a **test-writer** (modo autônomo, correcti
 corrige **só o teste apontado**, depois a **test-validator** que audita e devolve um verdict
 (PASS/FAIL). Só com **PASS** o evaluator retoma a avaliação. O sub-loop consome o mesmo
 contador `attempt`/N.
+
+A **`e2e-test-writer`** tem ainda o **modo guarda** (o relatório aponta um fluxo sem teste, sem
+`testFile`, e ela escreve o teste que falta) e pode devolver dois sinais em vez de uma correção:
+- **"o produto diverge do contrato"** — o evaluator observa o critério de novo; se confirma,
+  reclassifica como código e manda ao `fix-runner` na mesma rodada, sem gastar tentativa; se
+  não confirma, é desacordo e vira PENDING para um humano;
+- **"ambiente"** (bundle velho, limite de login, harness ausente, stack não coberta) — PENDING,
+  sem incrementar.
 
 ---
 

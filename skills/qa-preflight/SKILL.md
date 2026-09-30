@@ -26,8 +26,12 @@ that is still moving.
 **It owns no correction logic.** Defects are fixed by dispatching the correctors that already
 exist, with the discipline they already have.
 
-**One carve-out, and only one: the permanent guard.** No test-writer covers a browser-level
-assertion suite, so when the visual gate is enabled the skill writes that assertion itself.
+**One carve-out, and only one: the visual guard.** A permanent guard that is a **test** goes to
+the matching test-writer — a guard for a **user flow** goes to `e2e-test-writer` when the
+project has an e2e suite (`GATES.md` lists an e2e gate proven green). A guard that is a **gate
+rule** stays a proposal in the findings report: building gates is `gate-builder`'s job. The
+exception is a **computed-value** assertion (contrast, height, density): no test-writer covers
+the visual suite, so when the visual gate is enabled the skill writes that assertion itself.
 This is guard code, not product behaviour — it changes what is *checked*, never what the
 application *does*. Production code stays off-limits under every circumstance, and the guard
 still goes through the checkpoint like any other change.
@@ -184,13 +188,24 @@ For each approved finding, emit an entry in the report schema
 | `gate` | a declared gate is violated | `fix-runner` |
 | `observable-criterion` | a contract criterion is not met | `fix-runner` |
 | `qa-finding` | a real defect **no contract criterion covered** — `ref` is the QA case ID | `fix-runner` |
-| `test` | coverage missing for a rule already in the code | the matching test-writer (`unit` / `integration` / `monorepo`) |
+| `test` | coverage missing for a rule already in the code — or, for `e2e`, the guard of a defect about to be fixed | the matching test-writer (`unit` / `integration` / `monorepo` / `e2e`) |
 
 **Re-execute what was corrected** before moving on. The plan must describe the fixed
 product; writing it first would document the defect as if it were the behaviour.
 
-One finding per dispatch. If a correction comes back "not resolved", the finding moves to the
-escalated list with that reason — it is never silently dropped.
+One finding per dispatch — except an e2e-guarded defect, which is one **sequence** of three
+(guard, fix, guard re-run). If a correction comes back "not resolved", the finding moves to the
+escalated list with that reason — it is never silently dropped. **The e2e guard is the one
+exception:** its expected first answer *is* "not resolved — product diverges", and that is the
+red-before-fix proof, not a failure. The guard re-run is this skill's own: run that one test
+headless with the e2e config (`GATES.md`) — the headed rule is for the investigation, not for
+this check — after confirming the dev server rebuilt. Escalate the
+finding instead when the guard comes back green before the fix (it does not reproduce the
+defect — remove only the guard test from its file — the file itself when it held nothing else — and only its own entry from the writer's checklist and coverage table, it guards nothing), when its validator verdict is FAIL, when it
+answers "environment", or when it is still red after the `fix-runner` reported the correction
+applied — unless that re-run is red for an environment reason, which is reported as such. The
+guard file is left uncommitted and listed in the findings report, next to the fix's commit, for
+the human to commit with the QA artifacts.
 
 ---
 
@@ -268,7 +283,7 @@ existed — had never executed once. When it finally ran, it found a badge at 4.
 - Write the blocking reason whenever a case cannot be executed.
 
 **Never:**
-- Edit production code directly — the only code this skill writes is the permanent guard.
+- Edit production code directly — the only code this skill writes is a visual-suite guard.
 - Skip the checkpoint, even when dispatched non-interactively.
 - Seed a session, forge a token, or bypass an anti-bot protection.
 - Mark an unexecuted case as verified, or fill `Resultado Obtido` for one.
@@ -301,3 +316,14 @@ returns "not resolved"; move the finding to escalated with that reason and conti
 
 **The visual gate is enabled in this project** — then, and only then, the proposed assertions
 are written into the suite and proven to fail before the fix and pass after it.
+
+**The guard is a user flow** — when the project has an e2e suite, dispatch `e2e-test-writer`
+with a `kind: test` entry (`testSuite: e2e`, `ref` = the QA case id, `targetSurface` = the
+surface and its route when it has one, the QA case's expected result in `message`, **no
+`testFile`**): with no existing test to fix, it runs in guard mode and writes the new one,
+judging it against that expected result — a `qa-finding` has no contract line. **Order it like
+a visual guard:** dispatch the guard before the fix — it must come back red ("product
+diverges") — then the `fix-runner`, then re-run the guard green. Confirm every test a writer
+returns with the matching test-validator, passing the feature's `contract.md` (when it has
+one) and the writer's checklist so the tags can be checked, before trusting it. Without an e2e suite, deliver the
+flow ready in the findings report, like an assertion for a visual suite that is not enabled.
