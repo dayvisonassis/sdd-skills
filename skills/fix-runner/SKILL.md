@@ -48,6 +48,7 @@ If no error report can be found, abort: "fix-runner requires an evaluation-repor
 
 - Read the `evaluation-report.json`: each `failures[]` entry — `kind`, `ref`, `message`, `location`, `evidence`.
 - For each failure, re-read **only** the violated criterion/gate (`ref`) in `contract.md`, so the fix conforms to the contract rather than guessing.
+- Read the section, in the project's gate documentation (`GATES.md` or its equivalent), of every declared gate whose scope the fix touches — not only the failing one: it states what the gate rejects and the accepted pattern the fix must follow.
 - Read `progress.json` to know the feature and the current `attempt`.
 - Read `spec.md`/`plan.md` lazily, only for the slice needed to understand the fix. No broad codebase sweep.
 
@@ -75,6 +76,8 @@ If no error report can be found, abort: "fix-runner requires an evaluation-repor
 - Signal back:
   - **"correction applied — re-evaluate F<ID>"** when the local revalidation passed and the commit was made, OR
   - **"not resolved — <reason>"** when the fix could not be made within scope (no commit).
+  - **"not resolved — needs an allowlist decision: <why>"** when the only way to clear a finding is a gate exception, which is a human decision (definition in `../evaluator/references/evaluation-report-schema.md`, "Gate exceptions"). No commit for it. Name each finding as the gate prints it (file, message and code), and say which of the categories the gate's section accepts it falls in: the evaluator checks the claim. **Never for a failure marked `exceptionRefused`**: a human already refused that exception, so correct it or return an ordinary "not resolved".
+  - Account for every failure in the report: fixed, claimed, or not resolved. When one invocation does more than one of these, send the signals together. The evaluator counts the committed correction.
 
 ---
 
@@ -91,6 +94,8 @@ If no error report can be found, abort: "fix-runner requires an evaluation-repor
 **Never:**
 - Implement new features or widen the contract's scope.
 - Do opportunistic refactoring outside the reported error.
+- Make a gate exception of any kind (an allowlist or baseline entry, a raised ratchet, an edited gate rule or runner, an inline disable) — that is a human decision. When the only way out is one, return "not resolved — needs an allowlist decision: <why>".
+- Make a gate pass by hiding the pattern it rejects from its detection: renaming the handle it recognises, wrapping the call in a helper it cannot see, or moving the code out of its scanned path. The fix is the accepted pattern in the gate's section.
 - Count attempts, decide ABORTED, or emit a CLEAN/FAIL verdict (the evaluator's job).
 - Write CLEAN/FAIL/PENDING/ABORTED into `progress.json` or increment `attempt`.
 - Use `git add -A` / `git add .`; skip hooks; create or switch branches.

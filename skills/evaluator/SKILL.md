@@ -21,7 +21,7 @@ Free-form. The skill needs:
 
 - **The target feature** (ID/name) — explicit and required. Abort if absent or ambiguous (list candidates).
 - Auto-discovers: `progress.json` (root of `docs/`) and the feature's `contract.md` (in `docs/<feature-id>-<kebab>/`).
-- Optional free-form overrides at the end — e.g. "no screenshots", "gates only", "max 5 attempts" (overrides `maxFixAttempts` for this run).
+- Optional free-form overrides at the end — e.g. "no screenshots", "gates only", "max 5 attempts" (overrides `maxFixAttempts` for this run), "no exception: <finding>" (a human refused the gate exception `fix-runner` asked for; see the schema, "Gate exceptions").
 
 If the feature has no `contract.md`, abort: "No contract.md for F<ID> — generate it with `spec-writer` first."
 
@@ -43,7 +43,7 @@ If the feature has no `contract.md`, abort: "No contract.md for F<ID> — genera
 
 - Resolve the target feature (ID/name). Abort if absent or ambiguous, listing candidates.
 - Locate `progress.json` (root of `docs/`) and the feature's `contract.md`. If `contract.md` is missing → abort ("generate the contract first with `spec-writer`"). If `progress.json` is missing, create it with `config.maxFixAttempts` default 3.
-- Parse any overrides (e.g. `max N attempts`, `gates only`, `no screenshots`) and record them for the report.
+- Parse any overrides (e.g. `max N attempts`, `gates only`, `no screenshots`, `no exception: <finding>`) and record them for the report. A `no exception` override sets `exceptionRefused` on the matching failure in every report this run writes.
 
 ### Step 2: Load Context
 
@@ -67,6 +67,12 @@ If the feature has no `contract.md`, abort: "No contract.md for F<ID> — genera
   - **A browser-gate failure (e2e or visual) has a third possible cause — the environment — and it is checked first.** A `429`, every case failing on the sign-in screen, the app not answering, or a dev server serving a stale bundle (its last build failed — read the dev server's log) is **PENDING (environment)**: neither `kind: test` nor `kind: gate`, no corrector is dispatched, and the evaluation stops as in Step 3. Only after the environment is ruled out classify the failure as test or code. For `kind: test` in an e2e file, also fill `targetSurface`.
   - **A red e2e test is not automatically a product failure.** With the environment ruled out, re-observe the behavior yourself (Step 5) against the contract line before classifying. A test with a `disputed` entry in the coverage table (matched by title **and** path) follows the **Disputes** lifecycle of `../e2e-test-writer/references/pabx-rules.md`: diverges → code failure as below; matches → PENDING for a human with both readings, never routed. The same lifecycle, applied here — from a run that included that test, made here when the gate's run did not — closes a disputed test that passed (moot, back as `unproven`), closes one whose contract line was changed, parks a skipped one as PENDING and removes the entry of one that no longer exists (stale). For any other red e2e test: the product diverges from the line → code failure: `kind: observable-criterion` with the criterion id as `ref` when the failing test carries a criterion tag, `kind: gate` with the e2e gate id otherwise — and put the failing test's path and the contract line in `location`/`message`, since a gate id alone tells `fix-runner` nothing. The product matches the line → the test is wrong: `kind: test`, with the contract line and your observation in `message`.
   - **A failing `tests/visual/` assertion that is itself wrong** (e.g. it measures mid-animation) belongs to no test-writer: record it as PENDING for a human, never as `kind: test` and never to `fix-runner` (see the schema).
+  - **A gate exception is a human decision, even when its gate passes.** Treat each kind as the table in `references/evaluation-report-schema.md` ("Gate exceptions") says; that table is the one definition. In short:
+    - every allowlist entry awaiting approval is an `exception-approval` item, whatever feature it names: the ones the gate's output lists, and the ones in the branch's diff of the allowlist file without the approval (read the file even when the contract does not declare that gate) (on the PABX, `raw-sql-backend` and `query-loop-backend` print them under `NEEDS HUMAN APPROVAL`);
+    - every other gate exception in the branch's diff against the base goes at the top of Findings.
+
+    Do not judge an exception acceptable yourself, and never route it to a corrector.
+  - **A red query-growth test whose every repeated statement is a per-item query with an approved allowlist entry** is a test to adjust, not code to fix: `kind: test`, so the writer records the `per-item query allowlisted` outcome of `../integration-test-writer/references/pabx-rules.md`.
 - (If `gates only` override is set, skip Step 5 and go to Step 6 with just gate results — except that a red e2e test, which cannot be classified without re-observing it, is then PENDING, never sent to `fix-runner` by default.)
 
 ### Step 5: Validate Surfaces & Observable Criteria
@@ -76,15 +82,21 @@ If the feature has no `contract.md`, abort: "No contract.md for F<ID> — genera
 - For each Observable Criterion, collect verifiable evidence (e.g. CTA present, login in top nav, redirect behavior, visual identity). A criterion with no observable evidence is a failure (`kind: observable-criterion`, `ref: <crit-id>`).
 - **When the project has an e2e suite (`GATES.md` lists an e2e gate proven green)**, the e2e tests tagged with a criterion's id are part of its evidence. Get them from **one run per feature**, not one per criterion — every run costs the harness its logins against the auth rate limit. Reuse the run of Step 4 — the e2e gate's, or the feature run made there for a dispute — when it ran the feature's tests and its output can be mapped by tag; otherwise run once with the e2e config from `GATES.md` and `--grep "@<feature-id>(?![\w-])" --reporter=json`, and map the results by tag. Criterion ids repeat across features and `@F08` is a prefix of `@F08-v2`, so always pair the **anchored** feature tag with the criterion. The tests complement the screenshots, never replace the observation.
 - **When the project has an e2e suite, missing e2e coverage is a failure — per row, not per surface.** Every row the contract's `Test-suite hint` maps to `e2e` must carry one outcome of the closed list in `../e2e-test-writer/references/pabx-rules.md` ("Coverage outcomes") in the writer's coverage table (`docs/<feature-id>-<kebab>/e2e-test.md`): test titles that exist, carry the feature and surface tags and are **not** marked `unproven`, or a `not e2e-testable` reason worded as that list words it. Check an accepted reason against the product before trusting it (a "no removal path" where a delete route exists is not one); an accepted reason makes that row yours to check by hand, like a `runtime-only` row, and it goes in Findings (the contract expected automation). "No removal path — harness lacks `<fixture>`" is an environment gap: PENDING, naming the fixture. `disputed` entries are arbitrated, closed or removed in Step 4, per the Disputes lifecycle; a row holding only open `disputed` entries awaits arbitration and is not missing coverage; the row's other tests still count. A row the writer marks `out of e2e scope — <suite>` (a computed value, say) is a mistake of the contract's mapping: record it as PENDING for a human, with the suite it belongs to — never route it back to the writer. A row with none of the outcomes above — including one marked `unproven` or carrying any other reason → `kind: test`, `testSuite: e2e`, `ref` = the e2e gate id, `targetSurface` = its surface, the behavior in `message`, no `testFile` — routed to `e2e-test-writer`, which runs in guard mode. **Only when the project is the PABX monorepo** (the `apps/frontend` + `apps/backend` layout the test-writers cover); elsewhere record it as PENDING for a human — no e2e writer exists for that stack, and routing it would only burn attempts.
+- **When the project's gate documentation describes a query-growth (N+1) check**, every row the contract's `Test-suite hint` marks `integration — query growth` must have, in the integration writer's `.test.md` checklist, a growth test title or one outcome of the closed list in `../integration-test-writer/references/pabx-rules.md` ("Query growth — Scope and outcomes"). Check each row like an e2e reason, not by its presence:
+  - a growth test title must exist in the suite and have **run** in this evaluation, green. A red one is a code failure, as in Step 4. The integration gate selects suites by name, so when its run did not include that suite, run the test by title once;
+  - a `not measurable` outcome must hold against the code;
+  - a `pre-existing N+1` outcome holds only when **neither** the loop **nor** the call that repeats is in the branch's diff against the base. Check both locations the outcome names. A loop the feature wrote around a legacy helper is the feature's N+1.
+
+  A missing, unrun or false one → `kind: test`, `testSuite: integration`, `ref` = the integration gate id, `targetFile` = the endpoint's controller, the endpoint and what is wrong in `message`, routed to `integration-test-writer` and confirmed by its validator (Step 8). A `pre-existing N+1` outcome that holds goes in Findings, for the legacy migration.
 - Map every PRD-derived acceptance back to a contract criterion/gate (the contract already did this traceability; honor it).
 
 ### Step 6: Decide State
 
 Determine the feature's state strictly from contract adherence — never from "looks ok":
 
-- **CLEAN** — no failures: all gates pass, all observable criteria met. → record state, proceed to Step 9.
-- **FAIL** — at least one **correctable** failure (gate/test/observable). → go to Step 7 (loop).
-- **PENDING** — something the evaluator **cannot test by itself** (needs a human, or an environment it cannot bring up). → record state with a note, proceed to Step 9.
+- **CLEAN** — no failures and nothing pending: all gates pass, all observable criteria met, `pending[]` empty. → record state, proceed to Step 9.
+- **FAIL** — at least one **correctable** failure (gate/test/observable). Items in `pending[]` are not failures and do not make a FAIL. → go to Step 7 (loop).
+- **PENDING** — no correctable failure left, and something the evaluator **cannot decide or test by itself** (needs a human, or an environment it cannot bring up), including any `pending[]` item. Step 7.4 also stops the loop as PENDING when `fix-runner`'s only answer is exception claims that hold. → record state with a note, proceed to Step 9.
 - **ABORTED** — decided in Step 7 when attempts are exhausted.
 
 List exactly which gates/criteria failed.
@@ -94,13 +106,19 @@ List exactly which gates/criteria failed.
 - Read `attempt` and `maxFixAttempts` (N) from `progress.json`.
 - **If `attempt >= N`** → set `state: ABORTED`; stop and report (the loop tried N times without converging). Proceed to Step 9.
 - **Else:**
-  1. Write/refresh `evaluation-report.json` in the feature folder (schema in `references/evaluation-report-schema.md`) with the current `attempt` and the classified `failures[]`.
+  1. Write/refresh `evaluation-report.json` in the feature folder (schema in `references/evaluation-report-schema.md`) with the current `attempt`, the classified `failures[]` and the `pending[]` items of this evaluation.
   2. Set `state: FAIL` in `progress.json` and persist the report path in `lastEvaluationReport`.
   3. **Route each failure by `kind`:**
      - **`kind: gate` / `observable-criterion` (code)** → **dispatch `fix-runner`**, passing the feature ID and the report path. Unchanged behavior — the on-disk report is the source of truth.
      - **`kind: test`** → run the **test-correction sub-flow (Step 8)** for that failure. Never send test failures to `fix-runner`.
   4. When the dispatched correction returns:
-     - Correction applied → **increment `attempt`** in `progress.json`, then **re-evaluate**: go back to Step 3.
+     - Correction applied → **increment `attempt`** in `progress.json`, then **re-evaluate**: go back to Step 3. **A signal that comes with a committed correction always increments**, whatever else it carries.
+     - "not resolved — needs an allowlist decision: <why>" → **check every claim; do not take `fix-runner`'s word for it.** A claim holds only when all of these are true:
+       - the finding it names is a finding of that gate, and it is not marked `exceptionRefused`;
+       - the gate's section accepts an exception for that kind of finding (on the PABX, never for an `interpolated` or `dynamic` raw);
+       - `<why>` names one of the categories the section accepts, and the code matches it.
+
+       When the signal carries **only** claims, every one holds, and no other correction (a test-writer's, say) was applied in this round, **the loop stops**. Record one `exception-decision` item per finding, set **PENDING**, and go to Step 9, with no increment: a human decides next (schema, "Gate exceptions"). When the signal also carries a committed correction, increment and re-evaluate, as above; the claim returns on the next round if the finding is still there. A claim that does not hold turns the whole signal into an ordinary "not resolved", below.
      - "not resolved — <reason>" → still increment `attempt`; if `attempt >= N` set `ABORTED`, else re-evaluate. Do not loop without incrementing.
      - The two `e2e-test-writer` signals of Step 8 are the exceptions, handled there: no correction was applied, so they do not increment by themselves (a guard the writer adds is judged by its validator, as a new test).
 
@@ -208,6 +226,7 @@ Next:
 - After a `kind: test` correction, require the **test-validator PASS** before resuming the evaluation.
 - Re-evaluate after each correction until CLEAN, PENDING, or ABORTED.
 - Increment `attempt` once per correction round (code or test); never loop without incrementing.
+- Treat every gate exception as the schema's "Gate exceptions" table says, never as fixed, failed or acceptable by your own judgement.
 
 **Never:**
 - Alter production code or "fix" the feature yourself — code corrections are the `fix-runner`'s job, test corrections are the test-writers' job.
@@ -235,7 +254,9 @@ Next:
 
 **maxFixAttempts reached**: state = ABORTED; keep the last `evaluation-report.json` for inspection.
 
-**fix-runner reports "not resolved"**: increment `attempt`; abort to ABORTED if the limit is hit, otherwise re-evaluate.
+**fix-runner reports "not resolved"**: increment `attempt`; abort to ABORTED if the limit is hit, otherwise re-evaluate. The exception is a signal made only of claims that hold: it stops the loop as PENDING, with no increment (Step 7.4).
+
+**After a human decided an `exception-decision`**: an added and approved entry makes the gate green on the next evaluation. A refusal comes back as the override `no exception: <finding>`, and that failure then goes to `fix-runner` marked `exceptionRefused`.
 
 **Override `max N attempts`**: use N for `maxFixAttempts` this run (and persist it to `config` if the user intends it to stick — otherwise apply for the session only and note it).
 

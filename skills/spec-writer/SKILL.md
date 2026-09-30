@@ -75,7 +75,7 @@ Explore the codebase before writing the spec (before the interview in single-fea
 - Testing framework and style (unit, integration, and end-to-end — where each suite lives and which gate runs it)
 - Error handling (exceptions, Result types, error codes, panic/recover, etc.)
 - Folder structure and naming conventions
-- **(v2) Quality-gate tooling** — the project's lint/typecheck/build/test commands and any architecture checks (dependency-cruiser, custom scripts) — needed to populate the contract's Quality Gates.
+- **(v2) Quality-gate tooling** — the project's lint/typecheck/build/test commands and any architecture checks (dependency-cruiser, custom scripts) — needed to populate the contract's Quality Gates. Read each gate's section in the gate documentation (`GATES.md`) too: a gate that rejects a pattern (raw SQL, a query inside a loop) shapes the design the spec describes — the API Contracts and Data Model should not plan what a declared gate will reject.
 
 **Layer 2 — Broad exploration (also mandatory):** beyond the baseline, capture any additional pattern you observe that could inform implementation — architectural decisions, codebase idioms, recurring abstractions, logging/observability, config management, deploy conventions, internationalization, accessibility, anything. Do not restrict yourself to the baseline list. A thorough report in a medium project typically has 8-15 patterns.
 
@@ -235,6 +235,9 @@ dispatch and helps the `evaluator` route a failure.
     external credential) → `runtime-only`, which the `evaluator` checks by hand.
 
   A UI behavior missing from the table is an untested flow nobody will notice.
+- **With a query-growth check** (described in `GATES.md`), add one row `integration — query growth`
+  per endpoint in the scope that check defines. The `evaluator` checks that each row has a growth
+  test or an accepted outcome.
 
 **Announce:** "Three documents ready. Proceeding to save..."
 
@@ -248,6 +251,7 @@ SPEC document:
 - [ ] API contracts have JSON examples (if included)
 - [ ] Data model has column types, indexes, constraints (if included)
 - [ ] Testing strategy has specific test functions
+- [ ] When the project's gate documentation (`GATES.md`) describes a query-growth (N+1) check, the Testing Strategy lists a growth test, and the contract's `Test-suite hint` a row `integration — query growth`, for every endpoint in the scope that check defines (the scope lives with the check; do not restate it)
 - [ ] PRD blocks mapped correctly per the PRD → SPEC table
 - [ ] Consumes/Provides from PRD are reflected in Scope or API Contracts
 - [ ] Cross-Feature Integration criteria from PRD Section 9 that reference this feature appear as integration tests

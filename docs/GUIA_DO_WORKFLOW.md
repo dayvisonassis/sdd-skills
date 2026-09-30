@@ -175,7 +175,15 @@ flowchart LR
 - **Quando:** após a spec da feature existir (precisa dos **três** arquivos, incluindo o
   `contract.md`).
 - **Entra:** a referência da feature (`F01`, pasta, etc.) + o PRD (auto-descoberto).
-- **Como funciona:** implementa **fase a fase** (do `plan.md`), **delega a escrita dos testes**
+- **Como funciona:** antes de escrever código no escopo de um gate declarado, **lê a seção dele no
+  `GATES.md`** (o que reprova e o padrão aceito), para o código já nascer conforme em vez de
+  aprender a regra reprovando. Uma **exceção de gate** (qualquer mudança que faça um gate aceitar o
+  que antes recusava; a definição está no esquema do relatório do `evaluator`) é
+  **decisão humana**. A única que ele pode propor é uma **entrada de allowlist**, e só quando o
+  padrão aceito não resolve e o caso cai numa categoria que a seção do gate aceita. Registra a
+  feature na entrada e em `Deviations`, e o `evaluator` deixa a feature PENDING até um revisor
+  aprovar (no PABX, o revisor preenche o campo `approved` da entrada). Os outros tipos de exceção
+  (ratchet, regra do gate) nunca são dele. Implementa **fase a fase** (do `plan.md`), **delega a escrita dos testes**
   à test-writer correta (por caminho/stack, em modo autônomo) — ou escreve os testes ele mesmo
   se o projeto não for PABX (fallback genérico) —, valida cada fase rodando os **gates do
   contrato**, e **commita 1 commit por fase**. Ao final, faz uma verificação completa (suíte
@@ -216,6 +224,16 @@ Quando o `evaluator` acha uma falha, ele **classifica e roteia**:
 
 - **Falha de código** (`kind: gate` / `observable-criterion`) → **`fix-runner`**: correção
   mínima no código, commit `fix(F<ID>)`, devolve ao evaluator. (Comportamento original.)
+  Quando a única saída é uma **exceção do gate**, o `fix-runner` não a cria. Ele devolve *"not
+  resolved — needs an allowlist decision: <motivo>"*. O evaluator **confere a alegação** (o gate
+  aceita exceção para aquele achado, e a categoria é uma das aceitas). Se ela vale, o evaluator
+  **para o loop** com PENDING, sem gastar tentativa, e um humano decide:
+  - aprovar a entrada: preenche `approved`, e a próxima avaliação encontra o gate verde;
+  - recusar: roda o evaluator de novo com `no exception: <achado>`, e o `fix-runner` passa a
+    ser obrigado a reescrever o código.
+
+  Toda entrada que o gate lista como *NEEDS HUMAN APPROVAL* também deixa a feature em PENDING
+  até a aprovação.
 - **Falha de teste** (`kind: test`) → **test-writer correspondente** (escolhida pelo
   caminho/stack do teste) corrige **só o teste** → **test-validator correspondente** confirma
   conformidade (PASS) → só então o evaluator **retoma a avaliação de onde parou**.
@@ -417,6 +435,13 @@ flowchart TD
   o estado sobrevive entre skills e execuções.
 - 🛠️ **Gates antes das features:** rode o `gate-builder` no setup; o `spec-writer` só
   **declara** o que já existe.
+- 🚦 **Exceção de gate é decisão humana.** Só a `implement-feature` pode propor uma, e só uma
+  entrada de allowlist numa categoria que o gate aceita. Ninguém faz exceção para deixar um gate
+  verde. O evaluator deixa a feature em PENDING até um humano aprovar.
+- 📈 **N+1 se prova medindo (no PABX).** Endpoint de leitura que a feature cria ou altera ganha
+  teste de **crescimento de consultas**: duas quantidades de dados, a mesma contagem. O escopo e
+  os motivos aceitos para não medir estão no `pabx-rules.md` da `integration-test-writer`. O
+  `spec-writer` põe o teste na dica de suíte do contrato, e o `evaluator` cobra que ele exista.
 
 ---
 
