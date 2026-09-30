@@ -1,6 +1,6 @@
 ---
 name: evaluator
-description: Externally evaluates an already-implemented feature against its contract.md (environment, quality gates, coverage manifest, observable criteria), producing screenshots, a report, and chat findings. Owns the evaluation loop — keeps the attempt counter in progress.json, decides the state (CLEAN/FAIL/PENDING/ABORTED), and routes each failure: code failures (gate/observable) to fix-runner, test failures to the matching test-writer (then confirmed by the matching test-validator) before resuming. Loops until CLEAN, PENDING, or ABORTED.
+description: "Externally evaluates an already-implemented feature against its contract.md (environment, quality gates, coverage manifest, observable criteria), producing screenshots, a report, and chat findings. Owns the evaluation loop — keeps the attempt counter in progress.json, decides the state (CLEAN/FAIL/PENDING/ABORTED), and routes each failure: code failures (gate/observable) to fix-runner, test failures to the matching test-writer (then confirmed by the matching test-validator) before resuming. Loops until CLEAN, PENDING, or ABORTED."
 ---
 
 # Evaluator
