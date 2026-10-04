@@ -34,8 +34,10 @@ sdd-skills/
 │   ├── integration-test-validator/  # PABX: audits the above
 │   ├── monorepo-unit-test-writer/   # PABX: other apps/ (node-express/worker, python-fastapi)
 │   ├── monorepo-unit-test-validator/# PABX: audits the above
-│   ├── e2e-test-writer/             # PABX: tests/e2e (Playwright flows against the running app)
-│   ├── e2e-test-validator/          # PABX: audits the above
+│   ├── e2e-test-writer/             # any stack: Playwright flows against the running app, harness read from GATES.md
+│   ├── e2e-test-validator/          # any stack: audits the above
+│   ├── pabx-e2e-test-writer/        # PABX only: the original e2e writer, kept as it was
+│   ├── pabx-e2e-test-validator/     # PABX only: audits the above
 │   └── pabx-design-system/          # PABX: pointer to the design-system doc (feeds the styles gate + visual check)
 └── docs/                        # base/reference docs + the workflow guide
 ```

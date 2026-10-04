@@ -64,8 +64,8 @@ flowchart TD
 | **fix-runner** | **Você não chama** — só o `evaluator` ou o `qa-preflight` | `evaluation-report.json` (código) | correção de código + commit | quem o chamou (reavaliação) |
 | **qa-preflight** | Feature **pronta**, antes de entregar ao QA | feature + spec/contract + tela no ar | plano de QA (`.md` + `.csv`) + relatório de achados | **fix-runner** (código) / **test-writer** (teste) |
 | **unit/integration/monorepo-unit-test-writer** | Escrita/correção de testes (PABX) | `target_file` (ou `evaluation-report.json` no fix) | testes escritos/corrigidos | — |
-| **e2e-test-writer** | Escrita/correção de testes de fluxo no navegador (PABX) | feature + superfície do contrato (ou `evaluation-report.json` no fix) | testes em `tests/e2e/` | — |
-| **unit/integration/monorepo-unit/e2e-test-validator** | Auditar testes (PABX) | `test_file_path` | relatório de conformidade (PASS/FAIL) | — |
+| **e2e-test-writer** | Escrita/correção de testes de fluxo no navegador (qualquer stack; lê perfis, linguagem, fixtures e política de dados do `GATES.md`; a variante só do PABX é a `pabx-e2e-test-writer`) | feature + superfície do contrato (ou `evaluation-report.json` no fix) | testes em `tests/e2e/` | — |
+| **unit/integration/monorepo-unit/e2e-test-validator** | Auditar testes (PABX; a `e2e-test-validator` serve a qualquer stack, e a variante só do PABX é a `pabx-e2e-test-validator`) | `test_file_path` | relatório de conformidade (PASS/FAIL) | — |
 
 > 🔑 Você invoca diretamente as skills do fluxo, **exceto `fix-runner`** (só o `evaluator` e o
 > `qa-preflight` o chamam). O **`qa-preflight` é sempre invocado por você**, nunca por outra
@@ -255,7 +255,7 @@ precisa aparecer na tabela de cobertura da writer (`docs/<feature>/e2e-test.md`)
 desfecho da **lista fechada** do `pabx-rules.md` da writer: teste já provado (um marcado
 `unproven` não conta), motivo "not e2e-testable" (telefonia/hardware, segundo tenant, credencial
 externa, configuração compartilhada, sem caminho de remoção), `out of e2e scope` ou `disputed`.
-Sem isso, o evaluator manda a `e2e-test-writer` escrever o teste (modo guarda) — **só no PABX**, a única stack que ela cobre; fora dele, vira PENDING para um humano.
+Sem isso, o evaluator manda a `e2e-test-writer` escrever o teste (modo guarda), em qualquer stack: ela lê o harness do `GATES.md`. Se o `GATES.md` não declara o que ela precisa (os perfis do e2e), vira PENDING para um humano.
 "Ter suíte e2e" significa sempre a mesma coisa: o `GATES.md` lista um gate e2e **já provado
 verde**.
 

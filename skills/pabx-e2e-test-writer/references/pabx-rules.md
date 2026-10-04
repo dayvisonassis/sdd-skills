@@ -2,7 +2,7 @@
 
 > **Project-specific appendix.** Hard rules for **PABX** end-to-end tests. The generic
 > principles live in the `SKILL.md`; this file is the ground truth for the PABX stack. The
-> `e2e-test-validator` audits against these same rules.
+> `pabx-e2e-test-validator` audits against these same rules.
 >
 > **Scope:** `tests/e2e/` at the repository root — `@playwright/test` driving the real app
 > (Angular frontend + Node backend + the shared dev database), headless, one user flow at a
@@ -248,7 +248,7 @@ rules bind every write the skill causes — the tests and the exploration that p
 The writer's coverage table (`docs/<feature-id>-<kebab>/e2e-test.md`) gives every row of the
 contract's `Test-suite hint` it covers **one** of these outcomes. The single combination allowed
 is a row's test titles next to `disputed` entries for some of its tests — and a row may hold
-`disputed` entries alone. The `evaluator`, `implement-feature` and `e2e-test-validator` accept
+`disputed` entries alone. The `evaluator`, `implement-feature` and `pabx-e2e-test-validator` accept
 nothing else.
 
 | Outcome | Meaning |
